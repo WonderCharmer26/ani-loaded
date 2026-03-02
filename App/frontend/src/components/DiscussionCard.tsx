@@ -1,7 +1,13 @@
 import { Link } from "react-router-dom";
-import type { Discussions } from "../schemas/discussion";
+import type { Discussion } from "../schemas/discussion";
 
-export default function DiscussionCard({ thread }: { thread: Discussions }) {
+export default function DiscussionCard({ thread }: { thread: Discussion }) {
+
+  // trim the title of the anime
+  const title = thread.title.trim().split(/\s+/);
+  //title preview to format and make sure the sentence not greater than 6
+  const titlePreview = title.length > 6 ? `${title.splice(0, 6).join(" ")}...` : thread.title;
+
   return (
     <Link to={`/discussion/${thread.id}`}>
       <article className="transition-transform hover:scale-105 cursor-pointer">
@@ -13,7 +19,7 @@ export default function DiscussionCard({ thread }: { thread: Discussions }) {
         <div className="flex flex-col items-start gap-1">
           {/*Add in user logo*/}
           <h3 className="mt-3 text-md font-semibold text-white">
-            {thread.title}
+            {titlePreview}
           </h3>
 
           <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">

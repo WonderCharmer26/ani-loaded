@@ -30,16 +30,19 @@ query ($id: Int) {
 """
 
 
+# clean up word function
 def normalize_optional_text(value: str | None) -> str | None:
     if value is None:
         return None
 
+    # get rid of unwanted white space from the start and end of the phrase
     stripped = value.strip()
+    # return
     return stripped or None
 
 
 # TODO: refactor this into another tile
-# validator fucntion to check if the anime from the form is in the database
+# validator function to check if the anime from the form is in the database
 async def validate_anime_exists(anime_id: int) -> bool:
     """Validate that an anime exists in AniList by ID."""
     async with httpx.AsyncClient(timeout=10.0) as client:
@@ -159,7 +162,7 @@ async def get_discussion_comments(discussion_id: str):
 # Route for making new discussions
 @router.post("/discussion")
 async def post_new_discussion(
-    # get the form info from frontend
+    # get the form info from frontend (Anime data added in as well for anime table)
     anime_id: int = Form(...),
     category_id: str = Form(...),
     title: str = Form(...),
