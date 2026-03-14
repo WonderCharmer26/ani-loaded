@@ -1,11 +1,13 @@
 import os
 import uuid
+from gotrue.types import User
 import httpx
 from dotenv import load_dotenv
-from fastapi import APIRouter, File, Form, UploadFile
+from fastapi import APIRouter, File, Form, Header, UploadFile
 from fastapi.exceptions import HTTPException
 from database.supabase_client import supabase
 from schemas.discussions import DiscussionsResponse
+from utilities.auth_validator import auth_validator
 from utilities.genreFunctions import ANILIST_URL
 from utilities.fileFunctions import ext_from_filename
 
@@ -30,8 +32,9 @@ query ($id: Int) {
 """
 
 
-# clean up word function
+# helper function to clean up word 
 def normalize_optional_text(value: str | None) -> str | None:
+    # account for no word
     if value is None:
         return None
 
@@ -41,10 +44,11 @@ def normalize_optional_text(value: str | None) -> str | None:
     return stripped or None
 
 
-# TODO: refactor this into another tile
+# TODO: refactor this into another file
 # validator function to check if the anime from the form is in the database
 async def validate_anime_exists(anime_id: int) -> bool:
     """Validate that an anime exists in AniList by ID."""
+    # try to request
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
             # send request
@@ -159,7 +163,7 @@ async def get_discussion_comments(discussion_id: str):
         )
 
 
-# Route for making new discussions
+# Protected route for making new discussions
 @router.post("/discussion")
 async def post_new_discussion(
     # get the form info from frontend (Anime data added in as well for anime table)
@@ -178,10 +182,17 @@ async def post_new_discussion(
     thumbnail: UploadFile | None = File(None),  # optional params
     episode_number: int | None = Form(None),  # optional params
     season_number: int | None = Form(None),  # optional params
+    authorization: str = Header(...) # required
 ):
+
+    # check if the request has an authorized user handles errors
+    user: User  = auth_validator(authorization)
+    
+    # account for negative anime
     if anime_id <= 0:
         raise HTTPException(status_code=422, detail="anime_id must be a positive integer")
 
+    # validate the anime with anilist
     anime_exists = await validate_anime_exists(anime_id)
     if not anime_exists:
         raise HTTPException(
@@ -189,6 +200,7 @@ async def post_new_discussion(
             detail="anime_id does not map to a valid AniList anime",
         )
 
+    # format the anime_payload to send to anime table
     anime_payload = {
         "id": anime_id,
         "title_romaji": normalize_optional_text(title_romaji),
@@ -200,10 +212,12 @@ async def post_new_discussion(
     }
 
     try:
+        # insert in to anime table so we can store the anime if it's new
         supabase.table("anime").upsert(anime_payload, on_conflict="id").execute()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Anime upsert failed: {e}")
 
+    
     # variables to hold the thumbnail info
     thumbnail_path = None
     thumbnail_public_url = None
@@ -217,11 +231,12 @@ async def post_new_discussion(
             raise HTTPException(
                 status_code=415, detail="Thumnail must be a png, jpeg or webp file"
             )
-        # store the thumbnail
+        # otherwise store the thumbnail
         file_bytes = await thumbnail.read()
 
         # make the max bytes 5mb to help with storage (might make bigger)
         max_bytes = 5 * 1024 * 1024
+        
         # make sure the file size is not bigger than the allowed
         if len(file_bytes) > max_bytes:
             raise HTTPException(
@@ -261,10 +276,11 @@ async def post_new_discussion(
             # if not store none seeing as there must be no thumbnail posted
             thumbnail_public_url = None
 
-    # Payload that i'll send to the database
+    # Payload that i'll send to the discussions table 
     payload = {
         "anime_id": anime_id,
         "category_id": category_id,
+        "created_by": user.id,
         "title": title.strip(),  # get rid of extra spaces (might change)
         "body": body.strip(),
         "episode_number": episode_number,

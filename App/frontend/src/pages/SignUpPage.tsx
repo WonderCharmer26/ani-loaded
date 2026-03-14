@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../services/supabase/supabaseConnection";
+import { signUpWithEmail } from "../services/supabase/supabaseAuth";
 
 export default function SignUpPage() {
   const navigate = useNavigate();
@@ -21,10 +21,9 @@ export default function SignUpPage() {
     }
 
     setLoading(true);
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
+
+    // attempt sign up
+    const { error } = await signUpWithEmail(email, password);
 
     if (error) {
       setError(error.message);
@@ -37,11 +36,18 @@ export default function SignUpPage() {
   return (
     <div className="flex items-center justify-center min-h-[calc(100vh-200px)] bg-[#101114]">
       <div className="bg-gray-800 p-8 rounded-lg shadow-lg w-full max-w-md">
-        <h1 className="text-2xl font-bold text-white mb-2 text-center">Sign Up</h1>
-        <p className="text-gray-400 mb-6 text-center">Create your AniLoaded account</p>
+        <h1 className="text-2xl font-bold text-white mb-2 text-center">
+          Sign Up
+        </h1>
+        <p className="text-gray-400 mb-6 text-center">
+          Create your AniLoaded account
+        </p>
         <form onSubmit={handleSignUp} className="space-y-4">
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-300">
+            <label
+              htmlFor="email"
+              className="block text-sm font-medium text-gray-300"
+            >
               Email
             </label>
             <input
@@ -55,7 +61,10 @@ export default function SignUpPage() {
             />
           </div>
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-300">
+            <label
+              htmlFor="password"
+              className="block text-sm font-medium text-gray-300"
+            >
               Password
             </label>
             <input
@@ -69,7 +78,10 @@ export default function SignUpPage() {
             />
           </div>
           <div>
-            <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-300">
+            <label
+              htmlFor="confirmPassword"
+              className="block text-sm font-medium text-gray-300"
+            >
               Confirm Password
             </label>
             <input
@@ -92,14 +104,20 @@ export default function SignUpPage() {
           </button>
         </form>
         <p className="mt-4 text-center text-gray-400">
-          Already have an account? <a href="/auth/login" className="text-blue-400 hover:underline">Login</a>
+          Already have an account?{" "}
+          <a href="/auth/login" className="text-blue-400 hover:underline">
+            Login
+          </a>
         </p>
       </div>
       {showPopup && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-gray-800 p-6 rounded-lg shadow-lg max-w-md w-full mx-4">
             <h2 className="text-xl font-bold text-white mb-4">Email Sent</h2>
-            <p className="text-gray-300 mb-6">An email has been sent to your address for verification. Please check your inbox and click the link to verify your account.</p>
+            <p className="text-gray-300 mb-6">
+              An email has been sent to your address for verification. Please
+              check your inbox and click the link to verify your account.
+            </p>
             <button
               onClick={() => {
                 setShowPopup(false);

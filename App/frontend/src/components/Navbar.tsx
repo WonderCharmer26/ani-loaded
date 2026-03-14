@@ -4,17 +4,12 @@ import { Menu } from "lucide-react";
 import AniLoadedLogo from "../assets/images/Ani-Loaded Logo.svg";
 import { useState, useEffect } from "react";
 import { supabase } from "../services/supabase/supabaseConnection";
+import { User } from "@supabase/supabase-js";
+import { useAuthContext } from "@/services/supabase/hooks/AuthProvider";
 
 export const Navbar = () => {
-  const [user, setUser] = useState<any>(null);
-
-  useEffect(() => {
-    const getUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      setUser(user);
-    };
-    getUser();
-  }, []);
+  // get the user data
+  const { user, loading } = useAuthContext();
 
   interface NavbarLinksI {
     id: number;
@@ -30,6 +25,8 @@ export const Navbar = () => {
     { id: 4, label: "ANIME", link: "/anime" },
     { id: 5, label: "RECOMMENDATION", link: "/recommendations" },
   ];
+
+  // account for loading user data like pfp's
 
   return (
     // NOTE: Space between the navbar and the rest of the content changable by the mt-4
@@ -66,7 +63,7 @@ export const Navbar = () => {
               </button>
             </Link>
           ) : (
-            <Link to="auth/login">
+            <Link to="/auth/login">
               <button className="bg-[#0066a5] cursor-pointer font-semibold text-white px-3.5 py-1.5 rounded-4xl ml-2">
                 Sign In
               </button>
@@ -75,10 +72,15 @@ export const Navbar = () => {
         </div>
         {user ? (
           <div className="flex items-center space-x-2">
-            <span className="text-white text-sm">{user.user_metadata?.username || 'User'}</span>
+            <span className="text-white text-sm">
+              {user.user_metadata?.username || "User"}
+            </span>
             <Link to="/profile">
               <img
-                src={user.user_metadata?.avatar_url || 'https://api.dicebear.com/7.x/avataaars/svg?seed=default'}
+                src={
+                  user.user_metadata?.avatar_url ||
+                  "https://api.dicebear.com/7.x/avataaars/svg?seed=default"
+                }
                 alt="User Avatar"
                 className="w-8 h-8 rounded-full object-cover border-2 border-gray-600 hover:border-gray-400 cursor-pointer"
               />

@@ -4,7 +4,7 @@ export interface Discussion {
   id: string;
   anime_id: number;
   category_id: string;
-  created_by: string;
+  created_by?: string; // NOTE: might remove
   title: string;
   body: string;
   is_locked: boolean;

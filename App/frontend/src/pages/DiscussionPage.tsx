@@ -1,23 +1,22 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import type { Discussions } from "../schemas/discussion";
+import type { Discussion } from "../schemas/discussion";
 import {
   getAllDiscussions,
-  getDiscussionThreads,
 } from "../services/api/discussionService";
 import DiscussionCard from "../components/DiscussionCard";
+
+// NOTE: refresh triggered on DiscussionSubmitPage
 
 // TODO: CONNECT THE TABLE, MAKE FUNCTIONS FOR FETCHING THE TABLES
 // TODO: MAKE FORM COMPONENT TO TAKE IN NEW DISCUSSION POSTS (MAKE MODAL)
 // TODO: MAKE DISCUSSION CARD THAT THE USER CAN CLICK TO TAKE THEM TO THE POST
-// WARNING: MIGHT MAKE THE USER ABLE TO UPLOAD THEIR OWN THUMBNAIL FOR THE DISCUSSIONS
-// WARNING: USE DUMMY DATA TO HELP WITH GIVING THE DISCUSSIONS PAGE A FILLER THUMBNAIL, WILL ADD STORAGE BUCKETS TO HANDLE USER UPLOADS FOR IMAGES
 
 // get the discussions data
 export default function DiscussionPage() {
   // function to get all the discussions
   const { data: threads = [], isLoading: threadsLoading } = useQuery<
-    Discussions[]
+    Discussion[]
   >({
     queryKey: ["discussions"],
     queryFn: () => getAllDiscussions(),
