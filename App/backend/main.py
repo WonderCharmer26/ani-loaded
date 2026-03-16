@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from routers.lists import router as list_router
 from routers.anime import router as anime_router
 from routers.discussions import router as discussions_router
 from routers.health import router as health_router
@@ -27,3 +28,4 @@ app.add_middleware(
 app.include_router(health_router)  # app health
 app.include_router(anime_router)  # all the anime routes that call anilist
 app.include_router(discussions_router)  # routes for the anime
+app.include_router(list_router)

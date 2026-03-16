@@ -31,9 +31,11 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import DiscussionSubmitPage from "./pages/DiscussionSubmitPage";
 import { AuthProvider } from "./services/supabase/hooks/AuthProvider";
 import { Toaster } from "sonner";
+import ListSubmitPage from "./pages/listSubmitPage";
 
 // Fetching functions to get data for the HomePage
 const demoUserId = "demo-user"; // TODO: plug in real user data, supabase useAuth might handle this for me
+const demoUserToken = "demo-user-token"; // TODO: replace with real auth token from session
 // NOTE: might use supabase.auth.getUser to help with getting data for protected routes
 //
 // Create router configuration with layouts
@@ -74,7 +76,12 @@ const router = createBrowserRouter([
         // TODO: Replace with the actual data fetching functions
         path: "lists",
         element: <ListsPage />,
-        loader: listsPageLoader(queryClient, demoUserId),
+        loader: listsPageLoader(queryClient, demoUserToken),
+      },
+      {
+        path: "list/create",
+        element: <ListSubmitPage />,
+        // add loader later
       },
       {
         // Anime Page: Shows all the different Anime to choose from

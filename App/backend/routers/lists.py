@@ -27,3 +27,14 @@ async def get_users_lists(authorization: str = Header(...)):
 @router.get("/popular-lists")
 async def get_popular_lists():
     pass
+
+# protected route
+@router.post("/create-list")
+async def create_list(authorization: str = Header(...)):
+    # check if the user is validated
+    # make sure that the userid matches the list table
+    # handle error
+    # add users picks into the list
+    # handle the errors 
+    # return the list response
+    pass
