@@ -31,7 +31,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import DiscussionSubmitPage from "./pages/DiscussionSubmitPage";
 import { AuthProvider } from "./services/supabase/hooks/AuthProvider";
 import { Toaster } from "sonner";
-import ListSubmitPage from "./pages/listSubmitPage";
+import ListSubmitPage from "./pages/ListSubmitPage";
 
 // Fetching functions to get data for the HomePage
 const demoUserId = "demo-user"; // TODO: plug in real user data, supabase useAuth might handle this for me
