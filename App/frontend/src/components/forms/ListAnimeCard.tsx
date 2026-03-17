@@ -71,6 +71,39 @@ function FilledListCard({
           </span>
         </div>
       )}
+
+      {/* Hover overlay — same pattern as AnimeCard */}
+      <div className="absolute inset-0 top-[25px] rounded-[38px] bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+        <div className="flex flex-col gap-y-1 p-4">
+          <p className="text-lg font-bold text-white leading-tight">{title}</p>
+          <p className="text-sm text-slate-300">Rank #{rank}</p>
+          {anime.episodes != null && (
+            <p className="text-sm text-slate-300">Episodes: {anime.episodes}</p>
+          )}
+          {anime.status && (
+            <p className="text-sm text-slate-300">{anime.status}</p>
+          )}
+          {anime.studios?.nodes.map((studio) => (
+            <p key={studio.id} className="text-sm text-slate-300">
+              {studio.name}
+            </p>
+          ))}
+          {anime.description && (
+            <p className="text-xs text-slate-400 mt-1 line-clamp-3">
+              {anime.description}
+            </p>
+          )}
+        </div>
+
+        {/* Score badge */}
+        {anime.averageScore != null && (
+          <div className="absolute bottom-6 left-4">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full border-[6px] border-[#3CB4FF] text-xl font-bold text-white">
+              {anime.averageScore}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

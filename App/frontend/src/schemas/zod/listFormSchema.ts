@@ -2,6 +2,7 @@ import z, { array, number, string } from "zod";
 import { AniListMedia } from "../animeSchemas";
 
 //NOTE: im going to move to seperate file to be reused
+// NOTE: edit schema on here & supabase gonna add feild for the amount for the request
 export const VisibilitySchema = z.enum(["public", "private"]); // for validatation
 
 export type Visibility = z.infer<typeof VisibilitySchema>;
@@ -35,6 +36,7 @@ export type UserList = z.infer<typeof UserListFormSchema>;
 
 // FOR REQUEST
 export const UserListRequestSchema = UserListFormSchema.extend({
+  amount: number().int().positive(), // amount of entries
   entries: array(UserListEntrySchema),
 });
 
