@@ -76,7 +76,8 @@ const router = createBrowserRouter([
         // TODO: Replace with the actual data fetching functions
         path: "lists",
         element: <ListsPage />,
-        loader: listsPageLoader(queryClient, demoUserToken),
+        // set up the loader when fetch set up
+        // loader: listsPageLoader(queryClient, demoUserToken),
       },
       {
         path: "list/create",
