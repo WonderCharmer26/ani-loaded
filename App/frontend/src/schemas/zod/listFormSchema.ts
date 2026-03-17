@@ -3,6 +3,7 @@ import { AniListMedia } from "../animeSchemas";
 
 //NOTE: im going to move to seperate file to be reused
 // NOTE: edit schema on here & supabase gonna add feild for the amount for the request
+// NOTE: I made validatation only for form on the request not on the validatation from the response (might restruct later)
 export const VisibilitySchema = z.enum(["public", "private"]); // for validatation
 
 export type Visibility = z.infer<typeof VisibilitySchema>;
@@ -32,7 +33,7 @@ export const UserListFormSchema = z.object({
 });
 
 // type for list form
-export type UserList = z.infer<typeof UserListFormSchema>;
+export type UserListForm = z.infer<typeof UserListFormSchema>;
 
 // FOR REQUEST
 export const UserListRequestSchema = UserListFormSchema.extend({
@@ -50,7 +51,7 @@ export interface UserListEntryResponse extends UserListEntry {
   anime: AniListMedia;
 }
 
-export interface UserListResponse extends UserList {
+export interface UserListResponse extends UserListForm {
   id: string; // might not be needed
   entries: UserListEntryResponse[];
 }
