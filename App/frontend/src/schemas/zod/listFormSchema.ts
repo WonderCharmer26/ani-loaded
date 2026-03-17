@@ -6,6 +6,7 @@ import { AniListMedia } from "../animeSchemas";
 // NOTE: I made validatation only for form on the request not on the validatation from the response (might restruct later)
 export const VisibilitySchema = z.enum(["public", "private"]); // for validatation
 
+// type to use for private or public setting
 export type Visibility = z.infer<typeof VisibilitySchema>;
 
 // validatation for anime chosen
