@@ -1,8 +1,10 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import type { AniListMedia } from "@/schemas/animeSchemas";
 import ListAnimeCard from "@/components/forms/ListAnimeCard";
 import ListAnimeSearchModal from "@/components/forms/ListAnimeSearchModal";
 import ListTitleInput from "@/components/forms/ListTitleInput";
+import { getAvailableGenres } from "@/services/api/animeCategoriesService";
 
 const MIN_ENTRIES_TO_SUBMIT = 5;
 const MIN_ENTRIES_TO_DRAG = 2;
@@ -12,6 +14,8 @@ export default function ListSubmitPage() {
   const [description, setDescription] = useState("");
   const [entries, setEntries] = useState<AniListMedia[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
+  const [selectedGenre, setSelectedGenre] = useState("");
+  const [isGenreOpen, setIsGenreOpen] = useState(false);
 
   const MAX_WORDS = 250;
 
@@ -30,11 +34,34 @@ export default function ListSubmitPage() {
 
   const wordCount = countWords(description);
 
+  const { data: genres = [] } = useQuery<string[]>({
+    queryKey: ["availableGenres"],
+    queryFn: () => getAvailableGenres(),
+  });
+
+  useEffect(() => {
+    if (!isGenreOpen) return;
+
+    const handleOutsideClick = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (
+        genreDropdownRef.current &&
+        !genreDropdownRef.current.contains(target)
+      ) {
+        setIsGenreOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [isGenreOpen]);
+
   // Track which index is being dragged
   const dragIndex = useRef<number | null>(null);
 
   // Ref for the scrollable cards container
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const genreDropdownRef = useRef<HTMLDivElement | null>(null);
 
   function scrollToEnd() {
     setTimeout(() => {
@@ -92,6 +119,7 @@ export default function ListSubmitPage() {
     const payload = {
       title: title.trim(),
       description: description.trim() || null,
+      genre: selectedGenre || null,
       entries: entries.map((anime, i) => ({
         anime_id: anime.id,
         rank: i + 1,
@@ -104,8 +132,52 @@ export default function ListSubmitPage() {
   return (
     <div className="w-full px-6 py-10">
       {/* Header */}
-      <div className="flex items-start mb-6">
+      <div className="flex flex-col  items-start mb-6">
         <ListTitleInput value={title} onChange={setTitle} />
+        {/* NOTE:: Button for genres */}
+        <div className="relative mb-6" ref={genreDropdownRef}>
+          <button
+            onClick={() => setIsGenreOpen((prev) => !prev)}
+            className="rounded-lg px-4 py-2 text-md z-1 bg-black font-semibold focus-within:border-none transition-colors"
+          >
+            {selectedGenre.toUpperCase() || `Select Genre ▼`}{" "}
+          </button>
+          {isGenreOpen && (
+            <div className="absolute top-full -mt-1.5 left-0 w-96 max-w-md rounded-lg bg-black p-4 shadow-lg z-50">
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => {
+                    setSelectedGenre("");
+                    setIsGenreOpen(false);
+                  }}
+                  className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                    selectedGenre === ""
+                      ? "bg-[#0066a5] text-white"
+                      : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                  }`}
+                >
+                  Clear
+                </button>
+                {genres.map((genre) => (
+                  <button
+                    key={genre}
+                    onClick={() => {
+                      setSelectedGenre(genre);
+                      setIsGenreOpen(false);
+                    }}
+                    className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                      selectedGenre === genre
+                        ? "bg-[#0066a5] text-white"
+                        : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                    }`}
+                  >
+                    {genre}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Cards row — scrollable only after 5 filled cards */}
