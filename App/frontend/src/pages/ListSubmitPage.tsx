@@ -51,15 +51,17 @@ export default function ListSubmitPage() {
     },
   });
 
-  const form = useForm<UserListRequest>({
-    defaultValues: {
-      title: "",
-      genre: null,
-      description: null,
-      visibility: "public",
-      amount: 0,
-      entries: [],
-    },
+  const defaultValues: UserListRequest = {
+    title: "",
+    genre: null,
+    description: null,
+    visibility: "public",
+    amount: 0,
+    entries: [],
+  };
+
+  const form = useForm({
+    defaultValues,
     validators: {
       onBlur: UserListRequestSchema,
     },

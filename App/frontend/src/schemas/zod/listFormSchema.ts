@@ -39,7 +39,7 @@ export type UserListForm = z.infer<typeof UserListFormSchema>;
 
 // FOR REQUEST
 export const UserListRequestSchema = UserListFormSchema.extend({
-  amount: number().int().positive(), // amount of entries
+  amount: number().int().nonnegative(), // amount of entries
   entries: array(UserListEntrySchema),
 });
 
