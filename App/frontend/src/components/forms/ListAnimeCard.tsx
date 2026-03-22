@@ -33,7 +33,7 @@ function FilledListCard({
 
   return (
     <div
-      className={`relative w-[250px] flex-shrink-0 pt-[25px] group ${isDraggable ? "cursor-grab active:cursor-grabbing" : ""}`}
+      className={`relative w-full pt-[25px] group ${isDraggable ? "cursor-grab active:cursor-grabbing" : ""}`}
       draggable={isDraggable}
       onDragStart={isDraggable ? onDragStart : undefined}
       onDragOver={isDraggable ? onDragOver : undefined}
@@ -111,7 +111,7 @@ function FilledListCard({
 // An empty placeholder card with a "+" button
 function EmptyListCard({ onAdd }: EmptyCardProps) {
   return (
-    <div className="relative w-[240px] flex-shrink-0 pt-[25px]">
+    <div className="relative w-full pt-[25px]">
       <button
         type="button"
         onClick={onAdd}

@@ -1,22 +1,29 @@
 import { useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useForm } from "@tanstack/react-form";
 import type { AniListMedia } from "@/schemas/animeSchemas";
 import ListAnimeCard from "@/components/forms/ListAnimeCard";
 import ListAnimeSearchModal from "@/components/forms/ListAnimeSearchModal";
 import ListTitleInput from "@/components/forms/ListTitleInput";
 import { getAvailableGenres } from "@/services/api/animeCategoriesService";
+import { postUserList } from "@/services/api/userListsService";
+import {
+  UserListRequest,
+  UserListRequestSchema,
+} from "@/schemas/zod/listFormSchema";
+import { supabase } from "@/services/supabase/supabaseConnection";
+import { toast } from "sonner";
 
 const MIN_ENTRIES_TO_SUBMIT = 5;
 const MIN_ENTRIES_TO_DRAG = 2;
 
 export default function ListSubmitPage() {
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
+  // states to pass in for validation
   const [entries, setEntries] = useState<AniListMedia[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
-  const [selectedGenre, setSelectedGenre] = useState("");
   const [isGenreOpen, setIsGenreOpen] = useState(false);
 
+  // for description
   const MAX_WORDS = 250;
 
   function countWords(text: string) {
@@ -25,20 +32,68 @@ export default function ListSubmitPage() {
       : text.trim().split(/\s+/).filter(Boolean).length;
   }
 
-  function handleDescriptionChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
-    const value = e.target.value;
-    if (countWords(value) <= MAX_WORDS) {
-      setDescription(value);
-    }
-  }
+  const submitListMutation = useMutation({
+    mutationFn: async ({
+      payload,
+      token,
+    }: {
+      payload: UserListRequest;
+      token: string;
+    }) => postUserList(payload, token),
+  });
 
+  const form = useForm<UserListRequest>({
+    defaultValues: {
+      title: "",
+      genre: null,
+      description: null,
+      visibility: "public",
+      amount: 0,
+      entries: [],
+    },
+    validators: {
+      onBlur: UserListRequestSchema,
+    },
+    onSubmit: async ({ value }: { value: UserListRequest }) => {
+      const { data, error } = await supabase.auth.getSession();
+
+      if (error) {
+        toast.error("Unable to validate your session. Please try again.");
+        return;
+      }
+
+      const token = data.session?.access_token;
+
+      if (!token) {
+        toast.error("Please sign in to submit a list.");
+        return;
+      }
+
+      const payload: UserListRequest = {
+        ...value,
+        amount: value.entries.length,
+      };
+
+      try {
+        await submitListMutation.mutateAsync({ payload, token });
+      } catch (submissionError) {
+        toast.error(`List submission failed: ${submissionError}`);
+      }
+    },
+  });
+
+  const title = form.state.values.title;
+  const description = form.state.values.description ?? "";
+  const selectedGenre = form.state.values.genre ?? "";
   const wordCount = countWords(description);
 
+  // fetch genres
   const { data: genres = [] } = useQuery<string[]>({
     queryKey: ["availableGenres"],
     queryFn: () => getAvailableGenres(),
   });
 
+  // for the dropdown
   useEffect(() => {
     if (!isGenreOpen) return;
 
@@ -56,10 +111,7 @@ export default function ListSubmitPage() {
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, [isGenreOpen]);
 
-  // Track which index is being dragged
   const dragIndex = useRef<number | null>(null);
-
-  // Ref for the scrollable cards container
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const genreDropdownRef = useRef<HTMLDivElement | null>(null);
 
@@ -70,31 +122,53 @@ export default function ListSubmitPage() {
     }, 0);
   }
 
+  function syncFormEntries(nextEntries: AniListMedia[]) {
+    const mappedEntries = nextEntries.map((anime, index) => ({
+      anime_id: anime.id,
+      rank: index + 1,
+    }));
+
+    form.setFieldValue("entries", mappedEntries);
+    form.setFieldValue("amount", mappedEntries.length);
+  }
+
   const isDraggable = entries.length >= MIN_ENTRIES_TO_DRAG;
   const canSubmit =
     entries.length >= MIN_ENTRIES_TO_SUBMIT && title.trim().length > 0;
 
-  // The card slots to render: all filled entries + one empty "+" card
   const cardSlots = [...entries, undefined];
+  const remaining = Math.max(0, MIN_ENTRIES_TO_SUBMIT - entries.length);
 
+  //adding cards to the list
   function handleAdd(anime: AniListMedia) {
-    setEntries((prev) => [...prev, anime]);
+    setEntries((prev) => {
+      const next = [...prev, anime];
+      syncFormEntries(next);
+      return next;
+    });
     scrollToEnd();
   }
 
+  // removing the cards from the list
   function handleRemove(index: number) {
-    setEntries((prev) => prev.filter((_, i) => i !== index));
+    setEntries((prev) => {
+      const next = prev.filter((_, i) => i !== index);
+      syncFormEntries(next);
+      return next;
+    });
   }
 
-  // --- Drag-and-drop handlers ---
+  // drag card func
   function handleDragStart(index: number) {
     dragIndex.current = index;
   }
 
+  // moving card func
   function handleDragOver(e: React.DragEvent) {
-    e.preventDefault(); // required to allow drop
+    e.preventDefault();
   }
 
+  // handle droping card func
   function handleDrop(targetIndex: number) {
     const from = dragIndex.current;
     if (from === null || from === targetIndex) return;
@@ -103,6 +177,7 @@ export default function ListSubmitPage() {
       const next = [...prev];
       const [moved] = next.splice(from, 1);
       next.splice(targetIndex, 0, moved);
+      syncFormEntries(next);
       return next;
     });
 
@@ -115,27 +190,28 @@ export default function ListSubmitPage() {
 
   function handleSubmit() {
     if (!canSubmit) return;
+    form.handleSubmit();
+  }
 
-    const payload = {
-      title: title.trim(),
-      description: description.trim() || null,
-      genre: selectedGenre || null,
-      entries: entries.map((anime, i) => ({
-        anime_id: anime.id,
-        rank: i + 1,
-      })),
-    };
-
-    console.log("List submit payload:", payload);
+  function handleDescriptionChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    const value = e.target.value;
+    if (countWords(value) <= MAX_WORDS) {
+      form.setFieldValue("description", value);
+    }
   }
 
   return (
-    <div className="w-full px-6 py-10">
-      {/* Header */}
-      <div className="flex flex-col  items-start mb-6">
-        <ListTitleInput value={title} onChange={setTitle} />
-        {/* NOTE:: Button for genres */}
-        <div className="relative mb-6" ref={genreDropdownRef}>
+    <div className="w-full min-h-screen px-6 py-10">
+      {/* Header — title input + genre dropdown (structure preserved) */}
+      <div className="flex flex-col items-start mb-10">
+        <p className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-4">
+          Create List
+        </p>
+        <ListTitleInput
+          value={title}
+          onChange={(value) => form.setFieldValue("title", value)}
+        />
+        <div className="relative mt-3" ref={genreDropdownRef}>
           <button
             onClick={() => setIsGenreOpen((prev) => !prev)}
             className="rounded-lg px-4 py-2 text-md z-1 bg-black font-semibold focus-within:border-none transition-colors"
@@ -147,7 +223,7 @@ export default function ListSubmitPage() {
               <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={() => {
-                    setSelectedGenre("");
+                    form.setFieldValue("genre", null);
                     setIsGenreOpen(false);
                   }}
                   className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
@@ -162,7 +238,7 @@ export default function ListSubmitPage() {
                   <button
                     key={genre}
                     onClick={() => {
-                      setSelectedGenre(genre);
+                      form.setFieldValue("genre", genre);
                       setIsGenreOpen(false);
                     }}
                     className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
@@ -180,90 +256,125 @@ export default function ListSubmitPage() {
         </div>
       </div>
 
-      {/* Cards row — scrollable only after 5 filled cards */}
-      <div
-        ref={scrollContainerRef}
-        className={`flex gap-[13px] pb-2 ${
-          entries.length >= MIN_ENTRIES_TO_SUBMIT
-            ? "overflow-x-auto"
-            : "overflow-x-hidden"
-        }`}
-      >
-        {cardSlots.map((anime, i) => {
-          const isEmptySlot = anime === undefined;
+      {/* Divider */}
+      <div className="w-full h-px bg-slate-800 mb-8" />
 
-          return (
-            <ListAnimeCard
-              key={isEmptySlot ? "empty-slot" : anime!.id}
-              anime={anime}
-              rank={i + 1}
-              isDraggable={!isEmptySlot && isDraggable}
-              onAdd={() => setModalOpen(true)}
-              onRemove={() => handleRemove(i)}
-              onDragStart={(e) => {
-                e.dataTransfer.effectAllowed = "move";
-                handleDragStart(i);
-              }}
-              onDragOver={handleDragOver}
-              onDrop={() => handleDrop(i)}
-              onDragEnd={handleDragEnd}
-            />
-          );
-        })}
-      </div>
+      {/* Ranking section */}
+      <section className="mb-14">
+        {/* Section header */}
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+            Your Ranking
+          </h2>
+          <div className="flex items-center gap-3">
+            {isDraggable && (
+              <span className="text-xs text-slate-500">Drag to reorder</span>
+            )}
+            <span
+              className={`text-xs font-semibold px-3 py-1 rounded-full transition-colors ${
+                canSubmit
+                  ? "bg-[#3CB4FF]/10 text-[#3CB4FF]"
+                  : "bg-slate-800 text-slate-400"
+              }`}
+            >
+              {entries.length} / {MIN_ENTRIES_TO_SUBMIT}
+            </span>
+          </div>
+        </div>
 
-      {/* Description */}
-      <div className="flex justify-center ">
-        {" "}
-        <div className="flex flex-col mt-8 w-4xl max-w-5xl">
+        {/* Cards carousel — always shows exactly 5 at a time */}
+        <div ref={scrollContainerRef} className="overflow-x-auto pb-4">
+          <div
+            className="grid gap-[13px] w-full"
+            style={{
+              gridTemplateColumns: `repeat(${Math.max(5, cardSlots.length)}, calc(20% - 10.4px))`,
+            }}
+          >
+            {cardSlots.map((anime, i) => {
+              const isEmptySlot = anime === undefined;
+              return (
+                <div key={isEmptySlot ? "empty-slot" : anime!.id}>
+                  <ListAnimeCard
+                    anime={anime}
+                    rank={i + 1}
+                    isDraggable={!isEmptySlot && isDraggable}
+                    onAdd={() => setModalOpen(true)}
+                    onRemove={() => handleRemove(i)}
+                    onDragStart={(e) => {
+                      e.dataTransfer.effectAllowed = "move";
+                      handleDragStart(i);
+                    }}
+                    onDragOver={handleDragOver}
+                    onDrop={() => handleDrop(i)}
+                    onDragEnd={handleDragEnd}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Validation hint inline under cards */}
+        {entries.length < MIN_ENTRIES_TO_SUBMIT && (
+          <p className="mt-4 text-sm text-slate-500">
+            {entries.length === 0
+              ? `Add at least ${MIN_ENTRIES_TO_SUBMIT} anime to submit your list.`
+              : `${remaining} more ${remaining === 1 ? "entry" : "entries"} needed to submit.`}
+          </p>
+        )}
+      </section>
+
+      {/* Description + Submit */}
+      <div className="w-full flex flex-col items-center ">
+        {/* Description */}
+        <div className="flex flex-col w-3xl mb-8">
           <label
             htmlFor="list-description"
-            className="block text-sm font-semibold text-slate-400 mb-2"
+            className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3"
           >
             Description{" "}
-            <span className="font-normal text-slate-500">(optional)</span>
+            <span className="font-normal normal-case tracking-normal text-slate-500">
+              (optional)
+            </span>
           </label>
-          {/* description */}
           <textarea
             id="list-description"
             value={description}
             onChange={handleDescriptionChange}
             placeholder="Tell people why you made this list..."
-            rows={4}
-            className="w-full rounded-2xl bg-black px-4 py-3 text-white placeholder-gray-500 focus:border-slate-500 focus:outline-none resize-none"
+            rows={5}
+            className="w-full rounded-2xl bg-slate-900/60 border border-slate-800 px-5 py-4 text-white placeholder-slate-600 focus:border-slate-600 focus:outline-none resize-none transition-colors"
           />
           <p
-            className={`mt-1 text-xs text-right ${
-              wordCount >= MAX_WORDS ? "text-red-400" : "text-slate-500"
+            className={`mt-2 text-xs text-right ${
+              wordCount >= MAX_WORDS ? "text-red-400" : "text-slate-600"
             }`}
           >
             {wordCount} / {MAX_WORDS} words
           </p>
         </div>
+
+        {/* Submit row */}
+        <div className="flex items-center flex-col gap-4">
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={!canSubmit}
+            className={`py-3 px-12 rounded-3xl font-bold text-white transition-all ${
+              canSubmit
+                ? "bg-[#0066a5] hover:bg-[#0077c0] cursor-pointer"
+                : "bg-slate-800 text-slate-500 cursor-not-allowed"
+            }`}
+          >
+            Submit List
+          </button>
+          {!canSubmit &&
+            title.trim().length === 0 &&
+            entries.length >= MIN_ENTRIES_TO_SUBMIT && (
+              <p className="text-sm text-slate-500">Add a title to continue.</p>
+            )}
+        </div>
       </div>
-
-      {/* Validation hint */}
-      {entries.length < MIN_ENTRIES_TO_SUBMIT && (
-        <p className="mt-6 text-sm text-slate-500">
-          Add at least {MIN_ENTRIES_TO_SUBMIT} anime to submit your list.{" "}
-          {entries.length > 0 &&
-            `(${MIN_ENTRIES_TO_SUBMIT - entries.length} more needed)`}
-        </p>
-      )}
-
-      {/* Submit button */}
-      <button
-        type="button"
-        onClick={handleSubmit}
-        disabled={!canSubmit}
-        className={`mt-8 py-3 px-10 rounded-3xl font-bold text-white transition-colors ${
-          canSubmit
-            ? "bg-black hover:bg-slate-800 cursor-pointer"
-            : "bg-slate-700 opacity-50 cursor-not-allowed"
-        }`}
-      >
-        Submit List
-      </button>
 
       {/* Anime search modal */}
       <ListAnimeSearchModal

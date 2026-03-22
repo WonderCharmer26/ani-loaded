@@ -3,10 +3,9 @@ import axios from "axios";
 import { backendUrl } from "./fetchAnimes";
 import { toast } from "sonner";
 import type {
-  UserList,
   UserListRequest,
   UserListResponse,
-} from "@/schemas/userLists";
+} from "@/schemas/zod/listFormSchema";
 
 // NOTE: Get Functions
 
@@ -62,7 +61,7 @@ export const getPopularLists = async (): Promise<UserListResponse[]> => {
 };
 
 //NOTE: POST FUNCTIONS
-const postUserList = async (
+export const postUserList = async (
   formData: UserListRequest, // packaged on the ListSubmitPage
   token: string,
 ): Promise<UserListResponse> => {

@@ -12,11 +12,11 @@ export type Visibility = z.infer<typeof VisibilitySchema>;
 // validatation for anime chosen
 export const UserListEntrySchema = z.object({
   // id if not needed, supabase handles that for us
-  list_id: string(),
+  list_id: string().optional(),
   anime_id: number().int().positive(),
   rank: number().int().positive().nullable(),
-  genre: string().nullable(),
-  created_at: string(),
+  genre: string().nullable().optional(),
+  created_at: string().optional(),
 });
 
 // type for user's each individual list entry
@@ -26,11 +26,12 @@ export type UserListEntry = z.infer<typeof UserListEntrySchema>;
 export const UserListFormSchema = z.object({
   // id if not needed, supabase handles that for us
   title: string(),
+  genre: string().nullable(), // optional user can make a genaric list
   description: string().nullable(), // optional if the user just wants to put a title
   visibility: VisibilitySchema,
-  owner_id: string(),
-  created_at: string(),
-  updated_at: string(),
+  owner_id: string().optional(),
+  created_at: string().optional(),
+  updated_at: string().optional(),
 });
 
 // type for list form
