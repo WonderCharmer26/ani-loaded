@@ -62,12 +62,15 @@ export default function ListSubmitPage() {
 
   const form = useForm({
     defaultValues,
+    // validates the list to make sure it matches the schema
     validators: {
       onBlur: UserListRequestSchema,
     },
     onSubmit: async ({ value }: { value: UserListRequest }) => {
+      // get the users session to send to the backend
       const { data, error } = await supabase.auth.getSession();
 
+      // account for error
       if (error) {
         toast.error("Unable to validate your session. Please try again.");
         return;
@@ -86,6 +89,7 @@ export default function ListSubmitPage() {
       };
 
       try {
+        // send the post req
         await submitListMutation.mutateAsync({ payload, token });
       } catch (submissionError) {
         toast.error(`List submission failed: ${submissionError}`);
@@ -93,7 +97,7 @@ export default function ListSubmitPage() {
     },
   });
 
-  // fetch genres
+  // fetch genres to display in the dropdown
   const { data: genres = [] } = useQuery<string[]>({
     queryKey: ["availableGenres"],
     queryFn: () => getAvailableGenres(),
@@ -204,7 +208,9 @@ export default function ListSubmitPage() {
   }
 
   return (
-    <form.Subscribe selector={(state: { values: UserListRequest }) => state.values}>
+    <form.Subscribe
+      selector={(state: { values: UserListRequest }) => state.values}
+    >
       {(values: UserListRequest) => {
         const title = values.title;
         const descriptionText = values.description ?? "";
@@ -313,7 +319,9 @@ export default function ListSubmitPage() {
                 </h2>
                 <div className="flex items-center gap-3">
                   {isDraggable && (
-                    <span className="text-xs text-slate-500">Drag to reorder</span>
+                    <span className="text-xs text-slate-500">
+                      Drag to reorder
+                    </span>
                   )}
                   <span
                     className={`text-xs font-semibold px-3 py-1 rounded-full transition-colors ${

@@ -63,7 +63,9 @@ async def create_list(
                 status_code=404, detail="Anime was not found when checking users lists"
             )
 
+    # make a set
     unique_anime_ids = {entry.anime_id for entry in entries}
+    # make an array of anime ids to pass to supabase
     anime_payload = [{"id": anime_id} for anime_id in unique_anime_ids]
 
     # upsert anime rows first so the ids exist for foreign key checks
@@ -95,7 +97,7 @@ async def create_list(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"List insert failed: {e}")
 
-    # make an array of entry obj to put in db
+    # make an array of entry obj (anime cards picked by the user) to put in db
     entry_payload = [
         {
             "list_id": created_list["id"],
@@ -121,7 +123,9 @@ async def create_list(
 
     return {
         "list": {
+            # list data that we get from the list table
             **created_list,
+            # entries that the user made into the db
             "entries": entry_response.data if entry_response else [],
         }
     }

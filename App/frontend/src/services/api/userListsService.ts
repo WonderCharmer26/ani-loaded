@@ -5,33 +5,37 @@ import { toast } from "sonner";
 import type {
   UserListRequest,
   UserListResponse,
+  UserListResponseWrapper,
 } from "@/schemas/zod/listFormSchema";
 
 // NOTE: Get Functions
 
 // function to get all users lists that are public
-export const getAllLists = async (): Promise<UserListResponse[]> => {
+export const getAllLists = async (): Promise<UserListResponseWrapper[]> => {
   // get the data from the backend
-  const response = await axios.get<UserListResponse[]>(`${backendUrl}/lists`);
+  const response = await axios.get<UserListResponseWrapper[]>(
+    `${backendUrl}/lists`,
+  );
 
   if (!response.data) {
     toast.error("There was an error getting all the anime lists");
     throw new Error("There was an error getting all the anime lists");
   }
 
+  // let the page map out the data
   return response.data;
 };
 
 // function to get the users current lists
 export const getUsersTopLists = async (
   userToken: string | null,
-): Promise<UserListResponse[]> => {
+): Promise<UserListResponseWrapper[]> => {
   // check if user is logged in
   if (!userToken) {
     toast.error("Please make sure your logged in order to view your lists");
   }
 
-  const response = await axios.get<UserListResponse[]>(
+  const response = await axios.get<UserListResponseWrapper[]>(
     `${backendUrl}/user-list`,
     {
       headers: { Authorization: `Bearer ${userToken}` },
@@ -47,8 +51,8 @@ export const getUsersTopLists = async (
 };
 
 // function to get all the popular lists
-export const getPopularLists = async (): Promise<UserListResponse[]> => {
-  const response = await axios.get<UserListResponse[]>(
+export const getPopularLists = async (): Promise<UserListResponseWrapper[]> => {
+  const response = await axios.get<UserListResponseWrapper[]>(
     `${backendUrl}/popular-lists`,
   );
 
@@ -67,16 +71,20 @@ export const postUserList = async (
 ): Promise<UserListResponse> => {
   // validate the form before senfing to the backend (lists page handles this as well)
   // might add a response type
-  const response = await axios.post(`${backendUrl}/create-list`, formData, {
-    headers: {
-      Authorization: `Bearer ${token}`,
+  const response = await axios.post<UserListResponseWrapper>(
+    `${backendUrl}/create-list`,
+    formData,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
     },
-  });
+  );
 
   if (!response.data) {
     toast.error("There was an error getting popular lists");
     throw new Error("There was an error getting popular lists");
   }
 
-  return response.data;
+  return response.data.list;
 };

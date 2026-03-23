@@ -57,3 +57,8 @@ export interface UserListResponse extends UserListForm {
   id: string; // might not be needed
   entries: UserListEntryResponse[];
 }
+
+// wrapper for the backend payload
+export interface UserListResponseWrapper {
+  list: UserListResponse;
+}
