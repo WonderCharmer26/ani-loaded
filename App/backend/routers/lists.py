@@ -1,13 +1,12 @@
-from copy import Error
 from dotenv import load_dotenv
-from fastapi import APIRouter, Form, Header
+from fastapi import APIRouter, Header
 from fastapi.exceptions import HTTPException
-from gotrue import User
-from starlette.types import HTTPExceptionHandler
-import supabase
+from gotrue.types import User
+
+from database.supabase_client import supabase
 
 from routers.discussions import validate_anime_exists
-from schemas.lists import UserListEntry, Visibility
+from schemas.lists import UserListCreate
 from utilities.auth_validator import auth_validator
 
 
@@ -41,35 +40,88 @@ async def get_popular_lists():
 
 
 # protected route
-() @ router.post("/create-list")
-
-
+@router.post("/create-list")
 async def create_list(
-    title: str = Form(),
-    genre: str | None = Form(),
-    description: str | None = Form(),
-    visibility: Visibility = Form(),
-    amount: int = Form(),
-    entries: list[UserListEntry] = Form(),
+    payload: UserListCreate,
     authorization: str = Header(...),
 ):
-    # check if the user is validated (handles raising error)
+    # check if the user is validated (handles raising error) (gets back user obj)
     user: User = auth_validator(authorization)
+
+    # strore the entries to break down
+    entries = payload.entries
 
     # check the animes chosen (might try to change into a set)
     for each_entry in entries:
-        if not validate_anime_exists(each_entry.anime_id):
+        # Might add in a check for the anime number to make sure its positive (dont think I need it tho tbh)
+        # validates each entry other wise raises an error
+        anime_exists = await validate_anime_exists(
+            each_entry.anime_id
+        )  # make sure that the userid matches the list table
+        if not anime_exists:
             raise HTTPException(
-                status_code=404,
-                detail="anime_id in one or more of the anime entries given was not provided properly",
+                status_code=404, detail="Anime was not found when checking users lists"
             )
-    # make sure that the userid matches the list table
+
+    unique_anime_ids = {entry.anime_id for entry in entries}
+    anime_payload = [{"id": anime_id} for anime_id in unique_anime_ids]
+
+    # upsert anime rows first so the ids exist for foreign key checks
     try:
-        pass
+        if anime_payload:
+            supabase.table("anime").upsert(anime_payload, on_conflict="id").execute()
     except Exception as e:
-        raise e
-    # handle error
-    # add users picks into the list
-    # handle the errors
-    # return the list response
-    pass
+        raise HTTPException(status_code=500, detail=f"Anime upsert failed: {e}")
+
+    # payload to sent to list table
+    list_payload = {
+        "title": payload.title.strip(),
+        "genre": payload.genre,
+        "description": payload.description,
+        "visibility": payload.visibility,
+        "amount": len(entries),
+        "owner_id": user.id,
+    }
+
+    created_list = None
+    # add the user list to db
+    try:
+        list_response = supabase.table("user_list").insert(list_payload).execute()
+        if not list_response.data:
+            raise HTTPException(status_code=500, detail="List insert failed")
+        created_list = list_response.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"List insert failed: {e}")
+
+    # make an array of entry obj to put in db
+    entry_payload = [
+        {
+            "list_id": created_list["id"],
+            "anime_id": each_entry.anime_id,
+            "rank": each_entry.rank,
+            "genre": each_entry.genre,
+        }
+        for each_entry in entries
+    ]
+
+    try:
+        entry_response = (
+            supabase.table("user_list_entry").insert(entry_payload).execute()
+            if entry_payload
+            else None
+        )
+    except Exception as e:
+        try:
+            supabase.table("user_list").delete().eq("id", created_list["id"]).execute()
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail=f"List entry insert failed: {e}")
+
+    return {
+        "list": {
+            **created_list,
+            "entries": entry_response.data if entry_response else [],
+        }
+    }
