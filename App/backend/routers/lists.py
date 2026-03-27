@@ -1,4 +1,3 @@
-from copy import Error
 from dotenv import load_dotenv
 from fastapi import APIRouter, Header
 from fastapi.exceptions import HTTPException
@@ -7,7 +6,7 @@ from gotrue.types import User
 from database.supabase_client import supabase
 
 from routers.discussions import validate_anime_exists
-from schemas.lists import UserList, UserListCreate, UserListEntry
+from schemas.lists import UserList, UserListCreate
 from utilities.auth_validator import auth_validator
 
 
@@ -19,17 +18,31 @@ load_dotenv()
 
 
 # display all users lists
-@router.get("/lists")
+@router.get("/lists", response_model=list[UserList])
 async def get_all_lists():
     # access the supabase table
     try:
-        # get the users_list and the user_list_entry table
-        res = supabase.table("user_lists").select("*, user_list_entry(*)").eq("is_public", True)
+        # get the users_list and the user_list_entry that are public
+        res = (
+            supabase.table("user_lists")
+            .select("*, user_list_entry(*)")
+            .eq("is_public", True)
+            .execute()
+        )
 
-        
+        if not res.data:
+            raise HTTPException(
+                status_code=404, detail="There was an error fetching the lists"
+            )
+
+        return res.data
+
     except Exception as e:
-        raise HTTPException(status_code=404, detail="Could not find any lists in the db")
-    return
+        raise HTTPException(
+            status_code=404,
+            detail=f"There was an error: {e}",
+        )
+
 
 # protected route (get users lists shown on profile page)
 @router.get("/user-lists")

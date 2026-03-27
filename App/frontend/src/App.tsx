@@ -22,7 +22,7 @@ import { homePageFetcher } from "./services/loaders/homePageLoader";
 import { animeInfoPrefetcher } from "./services/loaders/animeInfoPrefetcher";
 import { queryClient } from "./services/clients/queryClient";
 import { discussionPageLoader } from "./services/loaders/discussionPageLoader";
-import { listsPageLoader } from "./services/loaders/listsPageLoader";
+// import { listsPageLoader } from "./services/loaders/listsPageLoader";
 import { animeCategoriesLoader } from "./services/loaders/animeCategoriesLoader";
 import { recommendationsPageLoader } from "./services/loaders/recommendationsPageLoader";
 import DiscussionInfoPage from "./pages/DiscussionInfoPage";
@@ -32,6 +32,8 @@ import DiscussionSubmitPage from "./pages/DiscussionSubmitPage";
 import { AuthProvider } from "./services/supabase/hooks/AuthProvider";
 import { Toaster } from "sonner";
 import ListSubmitPage from "./pages/ListSubmitPage";
+
+// TODO: ADJUST THE TOASTER POSITIONING FOR THE APP
 
 // Fetching functions to get data for the HomePage
 const demoUserId = "demo-user"; // TODO: plug in real user data, supabase useAuth might handle this for me

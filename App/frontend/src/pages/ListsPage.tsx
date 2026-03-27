@@ -3,6 +3,9 @@ import CreateButton from "@/components/CreateButton";
 import TopAnimeListShowcase from "../components/TopAnimeShowcase";
 import LinkButton from "@/components/CreateButton";
 
+// TODO: Add in the fetching function to get lists from the backend
+//  TODO: Add in a filtering dropdown to get the different list types from the backend
+
 export default function ListsPage() {
   return (
     <div className="px-6 py-10 space-y-10">

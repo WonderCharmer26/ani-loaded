@@ -15,12 +15,13 @@ import { supabase } from "@/services/supabase/supabaseConnection";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 
+// constants for sorting user anime entries
 const MIN_ENTRIES_TO_SUBMIT = 5;
 const MIN_ENTRIES_TO_DRAG = 2;
 
 export default function ListSubmitPage() {
   const navigate = useNavigate();
-  // states to pass in for validation
+  // states for validation
   const [entries, setEntries] = useState<AniListMedia[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [isGenreOpen, setIsGenreOpen] = useState(false);
@@ -51,6 +52,7 @@ export default function ListSubmitPage() {
     },
   });
 
+  // form defaultValues
   const defaultValues: UserListRequest = {
     title: "",
     genre: null,
@@ -67,10 +69,9 @@ export default function ListSubmitPage() {
       onBlur: UserListRequestSchema,
     },
     onSubmit: async ({ value }: { value: UserListRequest }) => {
-      // get the users session to send to the backend
+      // get the users session
       const { data, error } = await supabase.auth.getSession();
 
-      // account for error
       if (error) {
         toast.error("Unable to validate your session. Please try again.");
         return;
@@ -97,13 +98,13 @@ export default function ListSubmitPage() {
     },
   });
 
-  // fetch genres to display in the dropdown
+  // fetch genres for the dropdown
   const { data: genres = [] } = useQuery<string[]>({
     queryKey: ["availableGenres"],
-    queryFn: () => getAvailableGenres(),
+    queryFn: (): Promise<string[]> => getAvailableGenres(),
   });
 
-  // for the dropdown
+  // functionality for the dropdown
   useEffect(() => {
     if (!isGenreOpen) return;
 
