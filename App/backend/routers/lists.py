@@ -1,3 +1,4 @@
+from copy import Error
 from dotenv import load_dotenv
 from fastapi import APIRouter, Header
 from fastapi.exceptions import HTTPException
@@ -6,7 +7,7 @@ from gotrue.types import User
 from database.supabase_client import supabase
 
 from routers.discussions import validate_anime_exists
-from schemas.lists import UserListCreate
+from schemas.lists import UserList, UserListCreate, UserListEntry
 from utilities.auth_validator import auth_validator
 
 
@@ -17,13 +18,20 @@ router = APIRouter()
 load_dotenv()
 
 
+# display all users lists
 @router.get("/lists")
 async def get_all_lists():
     # access the supabase table
-    pass
+    try:
+        # get the users_list and the user_list_entry table
+        res = supabase.table("user_lists").select("*, user_list_entry(*)").eq("is_public", True)
 
+        
+    except Exception as e:
+        raise HTTPException(status_code=404, detail="Could not find any lists in the db")
+    return
 
-# protected route
+# protected route (get users lists shown on profile page)
 @router.get("/user-lists")
 async def get_users_lists(authorization: str = Header(...)):
     # check if the user is validated
@@ -48,7 +56,7 @@ async def create_list(
     # check if the user is validated (handles raising error) (gets back user obj)
     user: User = auth_validator(authorization)
 
-    # strore the entries to break down
+    # store the entries to break down
     entries = payload.entries
 
     # check the animes chosen (might try to change into a set)

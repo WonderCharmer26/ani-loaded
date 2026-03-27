@@ -47,3 +47,5 @@ class UserList(BaseModel):
     updated_at: str
     amount: int
     entries: list[UserListEntry]
+
+# NOTE: CREATE THE USER LIST RESPONSE SCHEMA TO STRUCTURE THE DATA
