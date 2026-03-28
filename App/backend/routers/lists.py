@@ -6,8 +6,9 @@ from gotrue.types import User
 from database.supabase_client import supabase
 
 from routers.discussions import validate_anime_exists
-from schemas.lists import UserList, UserListCreate
+from schemas.lists import UserListCreate, UserListResponseWrapper, UserListWithAnime
 from utilities.auth_validator import auth_validator
+from utilities.anilist_client import fetch_anilist_media_map
 
 
 # connect to the router
@@ -19,8 +20,35 @@ load_dotenv()
 # NOTE: For other devs, I chose to return a pydantic model for validation purposes, fastapi handles the conversion
 
 
+async def attach_anime_to_list_entries(list_rows: list[dict]) -> list[dict]:
+    anime_ids = {
+        entry["anime_id"]
+        for list_row in list_rows
+        for entry in list_row.get("user_list_entry", [])
+        if entry.get("anime_id") is not None
+    }
+
+    if not anime_ids:
+        return list_rows
+
+    media_map = await fetch_anilist_media_map(list(anime_ids))
+
+    for list_row in list_rows:
+        hydrated_entries = []
+        for entry in list_row.get("user_list_entry", []):
+            hydrated_entry = {
+                **entry,
+                "anime": media_map.get(entry.get("anime_id")),
+            }
+            hydrated_entries.append(hydrated_entry)
+
+        list_row["user_list_entry"] = hydrated_entries
+
+    return list_rows
+
+
 # display all users lists
-@router.get("/lists", response_model=list[UserList])
+@router.get("/lists", response_model=list[UserListWithAnime])
 async def get_all_lists():
     # access the supabase table
     try:
@@ -37,8 +65,10 @@ async def get_all_lists():
                 status_code=404, detail="No lists found"
             )
 
+        hydrated = await attach_anime_to_list_entries(res.data)
+
         # validate all the items in the list
-        validated_list = [UserList.model_validate(item) for item in res.data]
+        validated_list = [UserListWithAnime.model_validate(item) for item in hydrated]
         return validated_list
 
     except Exception as e:
@@ -65,7 +95,7 @@ async def get_popular_lists():
 
 
 # protected route
-@router.post("/create-list")
+@router.post("/create-list", response_model=UserListResponseWrapper)
 async def create_list(
     payload: UserListCreate,
     authorization: str = Header(...),
@@ -146,11 +176,16 @@ async def create_list(
             pass
         raise HTTPException(status_code=500, detail=f"List entry insert failed: {e}")
 
+    list_with_entries = {
+        # list data that we get from the list table
+        **created_list,
+        "user_list_entry": entry_response.data if entry_response else [],
+    }
+
+    hydrated_payload = await attach_anime_to_list_entries([list_with_entries])
+
     return {
         "list": {
-            # list data that we get from the list table
-            **created_list,
-            # entries that the user made into the db
-            "entries": entry_response.data if entry_response else [],
+            **hydrated_payload[0],
         }
     }

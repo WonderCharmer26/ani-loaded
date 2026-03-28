@@ -3,6 +3,7 @@ from uuid import UUID
 from datetime import datetime
 from gotrue import ConfigDict
 from pydantic import BaseModel, PositiveInt
+from schemas.anilist import AniListMedia
 
 
 # For the type of post
@@ -40,6 +41,10 @@ class UserListEntry(BaseModel):
     created_at: datetime
 
 
+class UserListEntryWithAnime(UserListEntry):
+    anime: AniListMedia | None = None
+
+
 # responses for the user lists that I want to get back
 class UserList(BaseModel):
     # helps us validate the data structure before sending back the data response
@@ -55,6 +60,14 @@ class UserList(BaseModel):
     updated_at: datetime
     amount: PositiveInt
     user_list_entry: list[UserListEntry] = []
+
+
+class UserListWithAnime(UserList):
+    user_list_entry: list[UserListEntryWithAnime] = []
+
+
+class UserListResponseWrapper(BaseModel):
+    list: UserListWithAnime
 
 
 # NOTE: CREATE THE USER LIST RESPONSE SCHEMA TO STRUCTURE THE DATA
