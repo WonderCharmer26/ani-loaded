@@ -2,7 +2,7 @@ from typing import Optional, Literal
 from uuid import UUID
 from datetime import datetime
 from gotrue import ConfigDict
-from pydantic import BaseModel
+from pydantic import BaseModel, PositiveInt
 
 
 # For the type of post
@@ -11,8 +11,9 @@ Visibility = Literal["public", "private"]
 
 # anime gotten from anilist
 class UserListEntryCreate(BaseModel):
-    anime_id: int
-    rank: Optional[int] = None
+    list_id: Optional[UUID]
+    anime_id: PositiveInt
+    rank: PositiveInt | None
     genre: Optional[str] = None
 
 
@@ -28,6 +29,7 @@ class UserListCreate(BaseModel):
 
 # Anime entry that was chosen to send to the backend
 class UserListEntry(BaseModel):
+    # helps us validate the data structure before sending back the data response
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
@@ -38,8 +40,9 @@ class UserListEntry(BaseModel):
     created_at: datetime
 
 
-# responses for the user lists that I send off
+# responses for the user lists that I want to get back
 class UserList(BaseModel):
+    # helps us validate the data structure before sending back the data response
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
@@ -50,7 +53,7 @@ class UserList(BaseModel):
     owner_id: UUID
     created_at: datetime
     updated_at: datetime
-    amount: int
+    amount: PositiveInt
     user_list_entry: list[UserListEntry] = []
 
 

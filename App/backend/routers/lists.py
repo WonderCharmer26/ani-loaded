@@ -16,6 +16,8 @@ router = APIRouter()
 # might load in variables
 load_dotenv()
 
+# NOTE: For other devs, I chose to return a pydantic model for validation purposes, fastapi handles the conversion
+
 
 # display all users lists
 @router.get("/lists", response_model=list[UserList])
@@ -32,10 +34,12 @@ async def get_all_lists():
 
         if not res.data:
             raise HTTPException(
-                status_code=404, detail="There was an error fetching the lists"
+                status_code=404, detail="No lists found"
             )
 
-        return res.data
+        # validate all the items in the list
+        validated_list = [UserList.model_validate(item) for item in res.data]
+        return validated_list
 
     except Exception as e:
         raise HTTPException(

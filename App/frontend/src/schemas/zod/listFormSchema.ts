@@ -1,4 +1,4 @@
-import z, { array, number, string } from "zod";
+import z, { array, number, string, uuid } from "zod";
 import { AniListMedia } from "../animeSchemas";
 
 //NOTE: im going to move to seperate file to be reused
@@ -12,7 +12,7 @@ export type Visibility = z.infer<typeof VisibilitySchema>;
 // validatation for anime chosen
 export const UserListEntrySchema = z.object({
   // id if not needed, supabase handles that for us
-  list_id: string().optional(),
+  list_id: uuid().optional(),
   anime_id: number().int().positive(),
   rank: number().int().positive().nullable(),
   genre: string().nullable().optional(),
@@ -39,7 +39,7 @@ export type UserListForm = z.infer<typeof UserListFormSchema>;
 
 // FOR REQUEST
 export const UserListRequestSchema = UserListFormSchema.extend({
-  amount: number().int().nonnegative(), // amount of entries
+  amount: number().int().positive(), // amount of entries
   entries: array(UserListEntrySchema),
 });
 
@@ -55,7 +55,7 @@ export interface UserListEntryResponse extends UserListEntry {
 
 export interface UserListResponse extends UserListForm {
   id: string; // might not be needed
-  entries: UserListEntryResponse[];
+  user_list_entry: UserListEntryResponse[];
 }
 
 // wrapper for the backend payload
