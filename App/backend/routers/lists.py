@@ -20,7 +20,9 @@ load_dotenv()
 # NOTE: For other devs, I chose to return a pydantic model for validation purposes, fastapi handles the conversion
 
 
+# helper func - ima move it later on
 async def attach_anime_to_list_entries(list_rows: list[dict]) -> list[dict]:
+    # get the anime_ids from the dict
     anime_ids = {
         entry["anime_id"]
         for list_row in list_rows
@@ -28,6 +30,7 @@ async def attach_anime_to_list_entries(list_rows: list[dict]) -> list[dict]:
         if entry.get("anime_id") is not None
     }
 
+    # return the empty array if no anime_ids
     if not anime_ids:
         return list_rows
 
@@ -36,14 +39,19 @@ async def attach_anime_to_list_entries(list_rows: list[dict]) -> list[dict]:
     for list_row in list_rows:
         hydrated_entries = []
         for entry in list_row.get("user_list_entry", []):
+            # combine the entry data
             hydrated_entry = {
                 **entry,
+                # add anime data
                 "anime": media_map.get(entry.get("anime_id")),
             }
+            # combine
             hydrated_entries.append(hydrated_entry)
 
+        # change value
         list_row["user_list_entry"] = hydrated_entries
 
+    # return combined data
     return list_rows
 
 
@@ -54,9 +62,9 @@ async def get_all_lists():
     try:
         # get the users_list and the user_list_entry that are public
         res = (
-            supabase.table("user_lists")
+            supabase.table("user_list")
             .select("*, user_list_entry(*)")
-            .eq("is_public", True)
+            .eq("visibility", "public")
             .execute()
         )
 
@@ -65,10 +73,13 @@ async def get_all_lists():
                 status_code=404, detail="No lists found"
             )
 
+        # combine
         hydrated = await attach_anime_to_list_entries(res.data)
 
         # validate all the items in the list
         validated_list = [UserListWithAnime.model_validate(item) for item in hydrated]
+
+        print(validated_list)
         return validated_list
 
     except Exception as e:
