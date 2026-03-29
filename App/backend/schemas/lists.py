@@ -55,7 +55,7 @@ class UserList(BaseModel):
     genre: Optional[str] = None
     description: Optional[str] = None
     visibility: Visibility
-    owner_id: UUID
+    owner_username: str
     created_at: datetime
     updated_at: datetime
     amount: PositiveInt

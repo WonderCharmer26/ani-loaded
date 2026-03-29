@@ -55,6 +55,38 @@ async def attach_anime_to_list_entries(list_rows: list[dict]) -> list[dict]:
     return list_rows
 
 
+def normalize_owner_username(list_rows: list[dict]) -> list[dict]:
+    owner_ids = {
+        str(list_row["owner_id"])
+        for list_row in list_rows
+        if list_row.get("owner_id") is not None
+    }
+
+    username_by_user_id: dict[str, str] = {}
+    if owner_ids:
+        profile_response = (
+            supabase.table("profiles")
+            .select("user_id, username")
+            .in_("user_id", list(owner_ids))
+            .execute()
+        )
+        for profile_row in profile_response.data or []:
+            user_id = profile_row.get("user_id")
+            if user_id is None:
+                continue
+            username_by_user_id[str(user_id)] = profile_row.get("username") or "Unknown"
+
+    normalized: list[dict] = []
+    for list_row in list_rows:
+        owner_id = list_row.get("owner_id")
+        owner_username = username_by_user_id.get(str(owner_id), "Unknown")
+        normalized_row = {**list_row, "owner_username": owner_username}
+        normalized_row.pop("owner_id", None)
+        normalized.append(normalized_row)
+
+    return normalized
+
+
 # display all users lists
 @router.get("/lists", response_model=list[UserListWithAnime])
 async def get_all_lists():
@@ -73,13 +105,12 @@ async def get_all_lists():
                 status_code=404, detail="No lists found"
             )
 
-        # combine
-        hydrated = await attach_anime_to_list_entries(res.data)
+        rows_with_usernames = normalize_owner_username(res.data)
+        hydrated = await attach_anime_to_list_entries(rows_with_usernames)
 
         # validate all the items in the list
         validated_list = [UserListWithAnime.model_validate(item) for item in hydrated]
 
-        print(validated_list)
         return validated_list
 
     except Exception as e:
@@ -190,8 +221,26 @@ async def create_list(
     list_with_entries = {
         # list data that we get from the list table
         **created_list,
+        "owner_username": "Unknown",
         "user_list_entry": entry_response.data if entry_response else [],
     }
+
+    try:
+        profile_response = (
+            supabase.table("profiles")
+            .select("username")
+            .eq("user_id", str(user.id))
+            .single()
+            .execute()
+        )
+        if profile_response.data:
+            list_with_entries["owner_username"] = (
+                profile_response.data.get("username") or "Unknown"
+            )
+    except Exception:
+        pass
+
+    list_with_entries.pop("owner_id", None)
 
     hydrated_payload = await attach_anime_to_list_entries([list_with_entries])
 

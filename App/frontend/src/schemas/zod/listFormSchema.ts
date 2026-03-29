@@ -50,11 +50,12 @@ export type UserListRequest = z.infer<typeof UserListRequestSchema>;
 export interface UserListEntryResponse extends UserListEntry {
   // anime data we get back
   id: string; // might not be needed
-  anime: AniListMedia;
+  anime: AniListMedia | null;
 }
 
 export interface UserListResponse extends UserListForm {
   id: string; // might not be needed
+  owner_username: string;
   user_list_entry: UserListEntryResponse[];
 }
 

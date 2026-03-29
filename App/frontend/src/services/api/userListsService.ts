@@ -11,9 +11,9 @@ import type {
 // NOTE: Get Functions
 
 // function to get all users lists that are public
-export const getAllLists = async (): Promise<UserListResponseWrapper[]> => {
+export const getAllLists = async (): Promise<UserListResponse[]> => {
   // get the data from the backend
-  const response = await axios.get<UserListResponseWrapper[]>(
+  const response = await axios.get<UserListResponse[]>(
     `${backendUrl}/lists`,
   );
 
