@@ -35,6 +35,7 @@ export async function getDiscussionComments(
 }
 
 // function to submit the discussions
+// TODO: refactor the logic for better reading like I did for postUserList func
 export async function submitDiscussion({
   anime_id,
   title_romaji,

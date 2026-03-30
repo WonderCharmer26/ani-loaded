@@ -1,10 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  QueryClient,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "@tanstack/react-form";
 import type { AniListMedia } from "@/schemas/animeSchemas";
 import ListAnimeCard from "@/components/forms/ListAnimeCard";
