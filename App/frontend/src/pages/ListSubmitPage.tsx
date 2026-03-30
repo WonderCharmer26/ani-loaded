@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import {
+  QueryClient,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useForm } from "@tanstack/react-form";
 import type { AniListMedia } from "@/schemas/animeSchemas";
 import ListAnimeCard from "@/components/forms/ListAnimeCard";
@@ -15,6 +20,8 @@ import { supabase } from "@/services/supabase/supabaseConnection";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 
+// TODO: MAKE TEST FOR EACH FUNCTION TO HELP MAKE SURE THAT IT RUN PROPERLY
+
 // constants for sorting user anime entries
 const MIN_ENTRIES_TO_SUBMIT = 5;
 const MIN_ENTRIES_TO_DRAG = 2;
@@ -25,6 +32,7 @@ export default function ListSubmitPage() {
   const [entries, setEntries] = useState<AniListMedia[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [isGenreOpen, setIsGenreOpen] = useState(false);
+  const queryControl = useQueryClient(); // handles updating the querys to refetch for us
 
   // for description
   const MAX_WORDS = 250;
@@ -48,6 +56,7 @@ export default function ListSubmitPage() {
       form.reset();
       setEntries([]);
       setModalOpen(false);
+      queryControl.invalidateQueries({ queryKey: ["lists"] });
       navigate("/lists");
     },
   });

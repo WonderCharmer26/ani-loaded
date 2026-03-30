@@ -12,10 +12,9 @@ Visibility = Literal["public", "private"]
 
 # anime gotten from anilist
 class UserListEntryCreate(BaseModel):
-    list_id: Optional[UUID]
     anime_id: PositiveInt
     rank: PositiveInt | None
-    genre: Optional[str] = None
+    genre: Optional[str] = None # might add the genre later on so that it can be added to the DB
 
 
 # for the list request that the user wants to put in the database
@@ -33,12 +32,12 @@ class UserListEntry(BaseModel):
     # helps us validate the data structure before sending back the data response
     model_config = ConfigDict(from_attributes=True)
 
-    id: UUID
+    id: Optional[UUID]
     list_id: UUID
-    anime_id: int
-    rank: Optional[int] = None
+    anime_id: PositiveInt
+    rank: PositiveInt
     genre: Optional[str] = None
-    created_at: datetime
+    created_at: Optional[datetime]
 
 
 class UserListEntryWithAnime(UserListEntry):
@@ -56,12 +55,12 @@ class UserList(BaseModel):
     description: Optional[str] = None
     visibility: Visibility
     owner_username: str
-    created_at: datetime
-    updated_at: datetime
+    created_at: Optional[datetime]
+    updated_at: Optional[datetime]
     amount: PositiveInt
     user_list_entry: list[UserListEntry] = []
 
-
+# might remove and remodel schema for UserList
 class UserListWithAnime(UserList):
     user_list_entry: list[UserListEntryWithAnime] = []
 

@@ -160,7 +160,7 @@ async def create_list(
                 status_code=404, detail="Anime was not found when checking users lists"
             )
 
-    # make a set
+    # make a set of anime_ids
     unique_anime_ids = {entry.anime_id for entry in entries}
     # make an array of anime ids to pass to supabase
     anime_payload = [{"id": anime_id} for anime_id in unique_anime_ids]
@@ -194,7 +194,7 @@ async def create_list(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"List insert failed: {e}")
 
-    # make an array of entry obj (anime cards picked by the user) to put in db
+    # array of the entries to to place in the database
     entry_payload = [
         {
             "list_id": created_list["id"],
@@ -206,6 +206,7 @@ async def create_list(
     ]
 
     try:
+        # checks if the frontend actually returns entries to be added
         entry_response = (
             supabase.table("user_list_entry").insert(entry_payload).execute()
             if entry_payload
@@ -213,11 +214,13 @@ async def create_list(
         )
     except Exception as e:
         try:
+            # error handle
             supabase.table("user_list").delete().eq("id", created_list["id"]).execute()
         except Exception:
             pass
         raise HTTPException(status_code=500, detail=f"List entry insert failed: {e}")
 
+    # NOTE: GOING TO LET SUPABASE HANDLE GETTING USER NAME
     list_with_entries = {
         # list data that we get from the list table
         **created_list,
@@ -242,6 +245,7 @@ async def create_list(
 
     list_with_entries.pop("owner_id", None)
 
+    # add the anime data to res
     hydrated_payload = await attach_anime_to_list_entries([list_with_entries])
 
     return {

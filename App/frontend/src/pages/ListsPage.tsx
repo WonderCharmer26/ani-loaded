@@ -1,4 +1,4 @@
-import TopAnimeListShowcase from "../components/TopAnimeShowcase";
+import UserEntryShowcase from "../components/UserEntryShowcase";
 import LinkButton from "@/components/CreateButton";
 import { useQuery } from "@tanstack/react-query";
 import { getAllLists } from "@/services/api/userListsService";
@@ -36,7 +36,7 @@ export default function ListsPage() {
       {!isLoading &&
         !error &&
         data?.map((list) => (
-          <TopAnimeListShowcase
+          <UserEntryShowcase
             key={list.id}
             list={list}
             username={list.owner_username}
