@@ -7,15 +7,14 @@ import type {
   UserListResponse,
   UserListResponseWrapper,
 } from "@/schemas/zod/listFormSchema";
+import { supabase } from "../supabase/supabaseConnection";
 
 // NOTE: Get Functions
 
 // function to get all users lists that are public
 export const getAllLists = async (): Promise<UserListResponse[]> => {
   // get the data from the backend
-  const response = await axios.get<UserListResponse[]>(
-    `${backendUrl}/lists`,
-  );
+  const response = await axios.get<UserListResponse[]>(`${backendUrl}/lists`);
 
   if (!response.data) {
     toast.error("There was an error getting all the anime lists");
@@ -23,6 +22,33 @@ export const getAllLists = async (): Promise<UserListResponse[]> => {
   }
 
   // let the page map out the data
+  return response.data;
+};
+
+// function to get specific list
+export const getSpecificList = async (
+  list_id: string,
+): Promise<UserListResponse> => {
+  // get the session id
+  const { data } = await supabase.auth.getSession();
+
+  const userToken = data.session?.access_token;
+
+  const headers = userToken
+    ? { Authorization: `Bearer ${userToken}` }
+    : undefined;
+
+  const response = await axios.get<UserListResponse>(
+    `${backendUrl}/list/${list_id}`,
+    { headers },
+  );
+
+  // handle error
+  if (!response.data) {
+    toast.error("There was an error getting this specific list");
+    throw new Error("There was an error getting this list data");
+  }
+
   return response.data;
 };
 

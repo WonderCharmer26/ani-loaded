@@ -1,6 +1,7 @@
 from typing import Optional, Literal
 from uuid import UUID
 from datetime import datetime
+import uuid
 from gotrue import ConfigDict
 from pydantic import BaseModel, PositiveInt
 from schemas.anilist import AniListMedia
@@ -54,19 +55,24 @@ class UserList(BaseModel):
     genre: Optional[str] = None
     description: Optional[str] = None
     visibility: Visibility
-    owner_username: str
     created_at: Optional[datetime]
     updated_at: Optional[datetime]
     amount: PositiveInt
     user_list_entry: list[UserListEntry] = []
 
-# might remove and remodel schema for UserList
-class UserListWithAnime(UserList):
+# this is for the list page when showing all the anime
+class UserListWithAllAnime(UserList):
+    owner_username: str
     user_list_entry: list[UserListEntryWithAnime] = []
 
+# for returning is_owner for UI purposes
+class SpecificUserListWithAnime(UserList):
+    owner_username: str # handle for frontend checks for UI
+    is_owner: bool
+    user_list_entry: list[UserListEntryWithAnime] = []
 
 class UserListResponseWrapper(BaseModel):
-    list: UserListWithAnime
+    list: UserListWithAllAnime
 
 
 # NOTE: CREATE THE USER LIST RESPONSE SCHEMA TO STRUCTURE THE DATA

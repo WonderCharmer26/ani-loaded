@@ -32,6 +32,7 @@ import DiscussionSubmitPage from "./pages/DiscussionSubmitPage";
 import { AuthProvider } from "./services/supabase/hooks/AuthProvider";
 import { Toaster } from "sonner";
 import ListSubmitPage from "./pages/ListSubmitPage";
+import ListInfoPage from "./pages/ListInfoPage";
 
 // TODO: ADJUST THE TOASTER POSITIONING FOR THE APP
 
@@ -85,6 +86,10 @@ const router = createBrowserRouter([
         path: "list/create",
         element: <ListSubmitPage />,
         // add loader later
+      },
+      {
+        path: "list/:id",
+        element: <ListInfoPage />,
       },
       {
         // Anime Page: Shows all the different Anime to choose from

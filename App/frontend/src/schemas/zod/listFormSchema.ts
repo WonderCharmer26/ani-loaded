@@ -55,6 +55,7 @@ export interface UserListEntryResponse extends UserListEntry {
 
 export interface UserListResponse extends UserListForm {
   id: string; // might not be needed
+  is_owner: boolean;
   owner_username: string;
   user_list_entry: UserListEntryResponse[];
 }

@@ -10,7 +10,7 @@ import { getAllLists } from "@/services/api/userListsService";
 // TODO: Work on fk relation with profile and userlist
 
 export default function ListsPage() {
-  // TODO: Add in the fetching function to get lists from the backend
+  // get all lists
   const { data, error, isLoading } = useQuery({
     queryKey: ["lists"],
     queryFn: () => getAllLists(),
@@ -19,6 +19,7 @@ export default function ListsPage() {
   return (
     <div className="px-6 py-10 space-y-10">
       {/* top of list page */}
+      {/* TODO: ADD A TITLE FOR THE LIST PAGE */}
       <div className="w-full flex justify-end">
         <LinkButton word="Create" link="/list/create" />
       </div>
