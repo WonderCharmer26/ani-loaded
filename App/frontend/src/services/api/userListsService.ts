@@ -6,7 +6,9 @@ import type {
   UserListRequest,
   UserListResponse,
   UserListResponseWrapper,
+  UserListUpdateRequest,
 } from "@/schemas/zod/listFormSchema";
+import { UserListUpdateSchema } from "@/schemas/zod/listFormSchema";
 import { supabase } from "../supabase/supabaseConnection";
 
 // NOTE: Get Functions
@@ -113,4 +115,34 @@ export const postUserList = async (
   }
 
   return response.data.list;
+};
+
+// NOTE: PATCH FUNCTIONS
+export const updateList = async (
+  list_id: string | undefined,
+  formChanges: UserListUpdateRequest,
+): Promise<{ message: string }> => {
+  const validatedFormChanges = UserListUpdateSchema.parse(formChanges);
+
+  // for auth check
+  const { data } = await supabase.auth.getSession();
+  const userToken = data.session?.access_token;
+
+  if (!userToken) {
+    toast.error("Please log in to update your list");
+    throw new Error("Missing auth token for list update");
+  }
+
+  const response = await axios.patch(
+    `${backendUrl}/list/${list_id}`,
+    validatedFormChanges,
+    { headers: { Authorization: `Bearer ${userToken}` } },
+  );
+
+  if (!response.data) {
+    toast.error("There was an error changing your list");
+    throw new Error("There was an error changing your list");
+  }
+
+  return response.data;
 };

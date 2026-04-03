@@ -28,6 +28,7 @@ class UserListCreate(BaseModel):
     entries: list[UserListEntryCreate]
 
 
+
 # Anime entry that was chosen to send to the backend
 class UserListEntry(BaseModel):
     # helps us validate the data structure before sending back the data response
@@ -44,6 +45,23 @@ class UserListEntry(BaseModel):
 class UserListEntryWithAnime(UserListEntry):
     anime: AniListMedia | None = None
 
+
+class UpdateListDataSchema(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+
+class UpdateListEntrySchema(BaseModel):
+    anime_id: int
+    rank: int
+
+    
+# class for list update
+class UserListUpdate(BaseModel):
+    list_data: UpdateListDataSchema
+    entries: list[UpdateListEntrySchema]
+
+class UserListSuccessMessage(BaseModel):
+    message: str
 
 # responses for the user lists that I want to get back
 class UserList(BaseModel):
@@ -67,7 +85,7 @@ class UserListWithAllAnime(UserList):
 
 # for returning is_owner for UI purposes
 class SpecificUserListWithAnime(UserList):
-    owner_username: str # handle for frontend checks for UI
+    owner_username: str 
     is_owner: bool
     user_list_entry: list[UserListEntryWithAnime] = []
 

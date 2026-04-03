@@ -15,6 +15,7 @@ import {
 import { CategoryFilters } from "../components/CategoryFilters";
 import { AnimeCard } from "../components/AnimeCard";
 import { AnimeCardSkeleton } from "../components/skeleton/AnimeCardSkeleton";
+import { ApiServiceError } from "../components/ApiServiceError";
 
 // default genre for when the user loads into the page
 const DEFAULT_GENRE: string[] = ["Action"]; // route in the backend will get the param to pass in
@@ -38,13 +39,21 @@ export default function AnimeCategoriesPage() {
   const selectedSearch = params.get("search") ?? ""; // get the search term from the url so the filter can react to it
 
   // displays the genres in the selector
-  const { data: genres = [] } = useQuery<string[]>({
+  const {
+    data: genres = [],
+    error: genresError,
+    refetch: refetchGenres,
+  } = useQuery<string[], Error>({
     queryKey: ["availableGenres"],
     queryFn: () => getAvailableGenres(),
   });
 
   // displays the seasons in the selector
-  const { data: seasons = [] } = useQuery<string[]>({
+  const {
+    data: seasons = [],
+    error: seasonsError,
+    refetch: refetchSeasons,
+  } = useQuery<string[], Error>({
     queryKey: ["availableSeasons"],
     queryFn: () => getSeasons(),
   });
@@ -54,7 +63,9 @@ export default function AnimeCategoriesPage() {
     data: animeData,
     isLoading,
     isFetching,
-  } = useQuery<AnimePaginationResponse>({
+    error: animeError,
+    refetch: refetchAnime,
+  } = useQuery<AnimePaginationResponse, Error>({
     queryKey: [
       "animeCategory",
       selectedGenre,
@@ -102,6 +113,21 @@ export default function AnimeCategoriesPage() {
 
   // only change if the seasons change
   const seasonFilters = useMemo(() => seasons, [seasons]);
+
+  const apiError = animeError || genresError || seasonsError;
+  if (apiError) {
+    return (
+      <ApiServiceError
+        title="AniList is temporarily unavailable"
+        message={apiError.message}
+        onRetry={() => {
+          void refetchAnime();
+          void refetchGenres();
+          void refetchSeasons();
+        }}
+      />
+    );
+  }
 
   return (
     <div className="px-6 py-10 space-y-10">

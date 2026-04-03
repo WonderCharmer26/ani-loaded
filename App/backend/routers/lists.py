@@ -3,11 +3,12 @@ from fastapi import APIRouter, Header
 from fastapi.exceptions import HTTPException
 from gotrue import Optional
 from gotrue.types import User
+from httpx import Request
 
 from database.supabase_client import supabase
 
 from routers.discussions import validate_anime_exists
-from schemas.lists import UserListCreate, UserListWithAllAnime, UserListResponseWrapper, SpecificUserListWithAnime
+from schemas.lists import UserListCreate, UserListSuccessMessage, UserListUpdate, UserListWithAllAnime, UserListResponseWrapper, SpecificUserListWithAnime
 from utilities.auth_validator import auth_validator
 from utilities.anilist_client import fetch_anilist_media_map
 
@@ -167,22 +168,36 @@ async def get_specific_list(list_id : str, authorization: Optional[str] = Header
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"There was an error: {e}")
 
-@router.put("/list/{list_id}")
-async def change_specific_list(list_id: str, authorization: str = Header(...)):
+@router.patch("/list/{list_id}", response_model=UserListSuccessMessage)
+async def change_specific_list(list_id: str, payload: UserListUpdate, authorization: str = Header(...)):
     # check the token (handles raising errors)
     user: User = auth_validator(authorization)
 
     try:
-        # make the update if the user_id and list_id matches
-        res = (
-            supabase.table("user_list")
-            .update({})
-            .eq("owner_id", user.id)
-            .eq("id", list_id)
-            .execute()
-        )
-    except:
-        pass
+        # make the update if the owner_id and list_id matches
+        (
+            supabase.rpc("update_list_and_entries", {
+                'p_list_id': list_id,
+                'p_user_id': user.id,
+                'p_title': payload.list_data.title,
+                'p_description': payload.list_data.description,
+                'p_entries': [
+                    entry.model_dump() for entry in payload.entries
+                ]
+            })
+        ).execute()
+
+        return {'message': 'The your list and entries have been updated'}
+
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update your list: {e}")
+
+# route for deleting lists
+@router.delete("/list/{list_id}", response_model=UserListSuccessMessage)
+async def delete_specific_list():
     pass
 
 

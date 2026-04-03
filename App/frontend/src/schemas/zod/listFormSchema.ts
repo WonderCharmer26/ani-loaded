@@ -46,6 +46,24 @@ export const UserListRequestSchema = UserListFormSchema.extend({
 // type we can use for type saftey
 export type UserListRequest = z.infer<typeof UserListRequestSchema>;
 
+// FOR UPDATE REQUEST
+export const UpdateListDataSchema = z.object({
+  title: string().optional(),
+  description: string().optional(),
+});
+
+export const UpdateListEntrySchema = z.object({
+  anime_id: number().int().positive(),
+  rank: number().int().positive(),
+});
+
+export const UserListUpdateSchema = z.object({
+  list_data: UpdateListDataSchema,
+  entries: array(UpdateListEntrySchema),
+});
+
+export type UserListUpdateRequest = z.infer<typeof UserListUpdateSchema>;
+
 // FOR RESPONSE
 export interface UserListEntryResponse extends UserListEntry {
   // anime data we get back

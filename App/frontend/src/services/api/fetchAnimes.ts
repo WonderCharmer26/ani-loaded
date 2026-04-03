@@ -22,26 +22,59 @@ if (import.meta.env.DEV) {
   console.debug("Using backend URL", backendUrl);
 }
 
+function buildApiError(error: unknown, fallback: string): Error {
+  if (axios.isAxiosError(error)) {
+    const status = error.response?.status;
+    const detail = error.response?.data?.detail;
+    const detailText =
+      typeof detail === "string" ? detail : error.message || fallback;
+
+    if (status) {
+      return new Error(`${fallback} (status ${status}): ${detailText}`);
+    }
+
+    return new Error(`${fallback}: ${detailText}`);
+  }
+
+  if (error instanceof Error) {
+    return new Error(`${fallback}: ${error.message}`);
+  }
+
+  return new Error(fallback);
+}
+
 // function to fetch the trending animes from the anime API
 export async function getTrending(): Promise<AniListMedia[]> {
-  const res = await axios.get<ShowcaseResponse>(`${backendUrl}/anime/trending`);
-  const media = res.data?.data?.Page?.media ?? [];
-  return media;
+  try {
+    const res = await axios.get<ShowcaseResponse>(`${backendUrl}/anime/trending`);
+    const media = res.data?.data?.Page?.media ?? [];
+    return media;
+  } catch (error) {
+    throw buildApiError(error, "Failed to fetch trending anime");
+  }
 }
 
 // function to get the popular anime from backend api
 // NOTE: the promise that I get back is the AniListMedia that I define in the schema
 export async function getPopular(): Promise<AniListMedia[]> {
-  const res = await axios.get<ShowcaseResponse>(`${backendUrl}/anime/popular`);
-  const media = res.data?.data.Page?.media ?? []; // send empty array if no data found
-  return media;
+  try {
+    const res = await axios.get<ShowcaseResponse>(`${backendUrl}/anime/popular`);
+    const media = res.data?.data.Page?.media ?? [];
+    return media;
+  } catch (error) {
+    throw buildApiError(error, "Failed to fetch popular anime");
+  }
 }
 
 // function to get the Top Rated Animes from the backend
 export async function getTopAnime(): Promise<AniListMedia[]> {
-  const res = await axios.get<ShowcaseResponse>(`${backendUrl}/anime/top`);
-  const media = res.data?.data.Page?.media ?? []; // return data if not return an empty array
-  return media;
+  try {
+    const res = await axios.get<ShowcaseResponse>(`${backendUrl}/anime/top`);
+    const media = res.data?.data.Page?.media ?? [];
+    return media;
+  } catch (error) {
+    throw buildApiError(error, "Failed to fetch top anime");
+  }
 }
 
 // Function to get all data for the anime info page
@@ -62,8 +95,7 @@ export async function getAnimeInfo(anime_id: number): Promise<AniListMedia> {
     }
     return animeInfo;
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    throw new Error(`Failed to fetch anime ${anime_id}: ${message}`);
+    throw buildApiError(error, `Failed to fetch anime ${anime_id}`);
   }
 }
 

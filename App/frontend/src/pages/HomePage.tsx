@@ -13,6 +13,7 @@ import { Link, useLoaderData } from "react-router-dom"; // use data from react r
 import { adSchemaI } from "../schemas/adSchema";
 import { getPosterAd } from "../services/supabase/getMainPagePhotos";
 import { ReviewList } from "../components/ReviewList";
+import { ApiServiceError } from "../components/ApiServiceError";
 
 /*NOTE: might make the seperation bigger for ShowcaseSection, teak mt-6 higher */
 // NOTE: gonna add the supabase user in here to account for when the user is logged in
@@ -33,6 +34,7 @@ export default function HomePage() {
     data: trendingAnime,
     error: trendingError,
     isLoading: trendingLoading,
+    refetch: refetchTrending,
   } = useQuery<AniListMedia[], Error>({
     queryKey: ["trendingAnime"],
     queryFn: getTrending,
@@ -46,6 +48,7 @@ export default function HomePage() {
     data: popularAnime,
     error: popularError,
     isLoading: popularLoading,
+    refetch: refetchPopular,
   } = useQuery<AniListMedia[], Error>({
     queryKey: ["popularAnime"],
     queryFn: getPopular,
@@ -60,6 +63,7 @@ export default function HomePage() {
     data: topAnime,
     error: topAnimeError,
     isLoading: topAnimeLoading,
+    refetch: refetchTopAnime,
   } = useQuery<AniListMedia[], Error>({
     queryKey: ["topAnime"],
     queryFn: getTopAnime,
@@ -75,20 +79,23 @@ export default function HomePage() {
     isLoading: adLoading,
   } = useQuery<adSchemaI[]>({ queryKey: ["ads"], queryFn: getPosterAd });
 
-  // NOTE: move the loading and error handling into the component with the trending showcase
-  if (trendingLoading) {
+  if (trendingLoading || popularLoading || topAnimeLoading) {
     return <h1>Loading...</h1>;
-  }
-  if (trendingError) {
-    return <h1>Error loading data</h1>;
   }
 
-  // NOTE: move the loading and error into the compontent for popular showcase section
-  if (popularLoading) {
-    return <h1>Loading...</h1>;
-  }
-  if (popularError) {
-    return <h1>Error loading data</h1>;
+  const animeServiceError = trendingError || popularError || topAnimeError;
+  if (animeServiceError) {
+    return (
+      <ApiServiceError
+        title="AniList is temporarily unavailable"
+        message={animeServiceError.message}
+        onRetry={() => {
+          void refetchTrending();
+          void refetchPopular();
+          void refetchTopAnime();
+        }}
+      />
+    );
   }
 
   // log the data to test what I get back
