@@ -7,11 +7,15 @@ import {
   UserListUpdateSchema,
   type UserListEntryResponse,
 } from "@/schemas/zod/listFormSchema";
-import { getSpecificList, updateList } from "@/services/api/userListsService";
+import {
+  deleteList,
+  getSpecificList,
+  updateList,
+} from "@/services/api/userListsService";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 type ListInfoFormValues = {
@@ -34,6 +38,7 @@ export default function ListInfoPage() {
 
   // queryKey for refreshing data
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   // get the specific list data
   const {
@@ -56,6 +61,7 @@ export default function ListInfoPage() {
     entries: [],
   });
 
+  // edit form
   const form = useForm({
     defaultValues: {
       title: "",
@@ -84,7 +90,8 @@ export default function ListInfoPage() {
       }
 
       const didEntriesChange =
-        normalizedEntries.length !== originalSnapshotRef.current.entries.length ||
+        normalizedEntries.length !==
+          originalSnapshotRef.current.entries.length ||
         normalizedEntries.some((entry, index) => {
           const originalEntry = originalSnapshotRef.current.entries[index];
           if (!originalEntry) return true;
@@ -119,6 +126,19 @@ export default function ListInfoPage() {
     onSuccess: (data) => {
       toast.success(data.message);
       queryClient.invalidateQueries({ queryKey: ["list", id] });
+    },
+  });
+
+  // mutation for deleting owners list
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteList(id!),
+    onSuccess: (data) => {
+      toast.success(data.message);
+      queryClient.invalidateQueries({ queryKey: ["list", id] });
+      navigate("/lists");
+    },
+    onError: () => {
+      toast.error("Failed to delete your list. Please try again.");
     },
   });
 
@@ -240,13 +260,15 @@ export default function ListInfoPage() {
   }
 
   return (
-    <form.Subscribe selector={(state: { values: ListInfoFormValues }) => state.values}>
+    <form.Subscribe
+      selector={(state: { values: ListInfoFormValues }) => state.values}
+    >
       {(values: ListInfoFormValues) => (
         <div className="px-6 py-10 space-y-10">
           <div className="max-w-4xl mx-auto space-y-4">
             <div className="flex flex-row gap-5 justify-center">
-              <div>
-                {is_owner ? (
+              {is_owner ? (
+                <div className="flex gap-3">
                   <button
                     type="button"
                     onClick={() => {
@@ -261,8 +283,18 @@ export default function ListInfoPage() {
                         ? "Done"
                         : "Edit"}
                   </button>
-                ) : null}
-              </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      deleteMutation.mutate();
+                    }}
+                    disabled={deleteMutation.isPending}
+                    className="rounded-full bg-red-900/60 px-4 py-2 text-sm font-semibold text-red-300 transition-colors hover:bg-red-800/60"
+                  >
+                    {deleteMutation.isPending ? "Deleting..." : "Delete"}
+                  </button>
+                </div>
+              ) : null}
             </div>
             {/* <p className="text-sm text-slate-500"> */}
             {/*   {list.user_list_entry.length} entries */}

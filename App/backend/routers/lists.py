@@ -1,3 +1,4 @@
+import re
 from dotenv import load_dotenv
 from fastapi import APIRouter, Header
 from fastapi.exceptions import HTTPException
@@ -176,7 +177,7 @@ async def change_specific_list(list_id: str, payload: UserListUpdate, authorizat
     try:
         # make the update if the owner_id and list_id matches
         (
-            supabase.rpc("update_list_and_entries", {
+          supabase.rpc("update_list_and_entries", {
                 'p_list_id': list_id,
                 'p_user_id': user.id,
                 'p_title': payload.list_data.title,
@@ -187,7 +188,7 @@ async def change_specific_list(list_id: str, payload: UserListUpdate, authorizat
             })
         ).execute()
 
-        return {'message': 'The your list and entries have been updated'}
+        return {'message': 'The list and entries have been updated'}
 
         
     except HTTPException:
@@ -197,8 +198,23 @@ async def change_specific_list(list_id: str, payload: UserListUpdate, authorizat
 
 # route for deleting lists
 @router.delete("/list/{list_id}", response_model=UserListSuccessMessage)
-async def delete_specific_list():
-    pass
+async def delete_specific_list(list_id: str, authorization: str = Header(...)):
+    # authorize the user
+    user: User = auth_validator(authorization)
+
+    try:
+        res = supabase.table('user_list').delete().eq("id", list_id).eq("owner_id", user.id).execute()
+
+        if not res.data:
+            raise HTTPException(status_code=404, detail="List could not be deleted it was not found")
+
+        return {"message" : "Your list has been succesfully deleted "}
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete your list: {e}") 
 
 
 # protected route (get users lists shown on profile page)

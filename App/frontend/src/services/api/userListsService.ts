@@ -117,6 +117,24 @@ export const postUserList = async (
   return response.data.list;
 };
 
+// NOTE: DELETE FUNCTIONS
+export const deleteList = async (list_id: string): Promise<{ message: string }> => {
+  const { data } = await supabase.auth.getSession();
+  const userToken = data.session?.access_token;
+
+  if (!userToken) {
+    toast.error("Please log in to delete your list");
+    throw new Error("Missing auth token for list deletion");
+  }
+
+  const response = await axios.delete<{ message: string }>(
+    `${backendUrl}/list/${list_id}`,
+    { headers: { Authorization: `Bearer ${userToken}` } },
+  );
+
+  return response.data;
+};
+
 // NOTE: PATCH FUNCTIONS
 export const updateList = async (
   list_id: string | undefined,
