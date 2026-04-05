@@ -1,4 +1,5 @@
 import httpx  # for handling the requests on the backend to get data from the Ani-list api
+from typing import Any, Mapping
 from fastapi import APIRouter, Depends
 from fastapi.exceptions import HTTPException
 from schemas.category_requests import CategoryFilter
@@ -8,6 +9,8 @@ from utilities.seasonFunctions import get_cached_seasons
 
 router = APIRouter()
 
+# NOTE: PLANNING ON SWITCHING TO REDIS LATER ON INSTEAD OF SERVER BUILT CACHE
+
 # Constant times for the cache
 CATEGORIES_CACHE_TTL_SECONDS = 300  # 5 min
 POPULAR_CACHE_TTL_SECONDS = 600  # 10 min
@@ -15,8 +18,113 @@ TRENDING_CACHE_TTL_SECONDS = 600  # 10 mmin
 TOP_CACHE_TTL_SECONDS = 600  # 10 min
 ANIME_BY_ID_CACHE_TTL_SECONDS = 1800  # 30 min
 
+# retry timeout
+ANILIST_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
+
+# TODO: MOVE THESE FUNCTIONS TO SEPERATE PY FILE TO HELP KEEP STRUCTURE CLEAN
+
+# helper function to help keep raising status_code errors cleaner
+def _raise_anilist_service_error(status_code: int, detail: str) -> None:
+    raise HTTPException(status_code=status_code, detail=detail)
+
+
+# helper to handle GraphQL errors
+def _has_forbidden_graphql_error(data: dict) -> bool:
+    errors = data.get("errors")
+    if not isinstance(errors, list):
+        return False
+
+    for item in errors:
+        if not isinstance(item, dict):
+            continue
+
+        message = str(item.get("message", "")).lower()
+        extensions = item.get("extensions")
+        code = ""
+        if isinstance(extensions, dict):
+            code = str(extensions.get("code", "")).lower()
+
+        if "forbidden" in message or "unauthorized" in message or code in {
+            "forbidden",
+            "unauthorized",
+        }:
+            return True
+
+    return False
+
+
+# helper to get the GraphQL errors
+def _extract_graphql_errors(data: dict[str, Any]) -> list[dict[str, Any]]:
+    errors = data.get("errors")
+    if isinstance(errors, list):
+        return [item for item in errors if isinstance(item, dict)]
+    return []
+
+
+# helper function to post handle getting anilist data and catching errors
+async def _post_to_anilist(
+    client: httpx.AsyncClient, query: str, variables: Mapping[str, Any]
+) -> dict[str, Any]:
+    response: httpx.Response | None = None
+    try:
+        response = await client.post(
+            ANILIST_URL,
+            json={"query": query, "variables": variables},
+            headers={"Content-Type": "application/json"},
+        )
+        response.raise_for_status()
+    except httpx.HTTPStatusError as error:
+        status = error.response.status_code
+        if status in {401, 403}:
+            _raise_anilist_service_error(
+                503, "AniList service unavailable or access restricted."
+            )
+        if status == 429:
+            _raise_anilist_service_error(
+                503, "AniList is rate-limited right now. Please try again soon."
+            )
+        if status >= 500:
+            _raise_anilist_service_error(
+                503, "AniList service is temporarily unavailable."
+            )
+        _raise_anilist_service_error(
+            502, "AniList returned an unexpected upstream response."
+        )
+    except httpx.RequestError:
+        _raise_anilist_service_error(
+            503, "Could not connect to AniList. Please try again soon."
+        )
+
+    if response is None:
+        _raise_anilist_service_error(503, "AniList request did not return a response.")
+    assert response is not None
+
+    data: Any = None
+    try:
+        data = response.json()
+    except ValueError:
+        _raise_anilist_service_error(502, "AniList returned invalid response data.")
+
+    if not isinstance(data, dict):
+        _raise_anilist_service_error(502, "AniList returned an invalid payload shape.")
+
+    if "errors" in data:
+        if _has_forbidden_graphql_error(data):
+            _raise_anilist_service_error(
+                503, "AniList service unavailable or access restricted."
+            )
+
+        errors = _extract_graphql_errors(data)
+        if errors:
+            _raise_anilist_service_error(502, str(errors))
+
+        _raise_anilist_service_error(502, "AniList returned a GraphQL error.")
+
+    return data
+
 
 # function to build a cache key
+# NOTE: probably replace with redis
 def build_cache_key(prefix: str, **parts: object) -> str:
     ordered_parts = [f"{key}={parts[key]}" for key in sorted(parts)]
     if not ordered_parts:
@@ -43,7 +151,7 @@ async def get_seasons():
 async def get_categories(filters: CategoryFilter = Depends()):
     # filter is set up in a seperate schema file
 
-    variables: dict[str] = {}  # initialize variables to store the parameters
+    variables: dict[str, Any] = {}  # initialize variables to store the parameters
 
     # check if filters are sent as params in the request
     if filters.search:
@@ -110,39 +218,14 @@ async def get_categories(filters: CategoryFilter = Depends()):
     """
 
     # use pass in the variables and make the request
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post(
-                ANILIST_URL,
-                json={
-                    "query": query,
-                    "variables": variables,  # variables used if there are any
-                },  # json params to send off in the request
-                headers={"Content-Type": "application/json"},
-            )
+    async with httpx.AsyncClient(timeout=ANILIST_TIMEOUT) as client:
+        data = await _post_to_anilist(client, query, variables)
 
-            # print the response to check
-            print(response)
+    # set the cache data
+    set_cache(cache_key, data, CATEGORIES_CACHE_TTL_SECONDS)
 
-            # show the status if all goes good
-            response.raise_for_status()
-
-            # package the data to send back to the frontend
-            data = response.json()  # turn the data into json to send off
-
-            # handle the errors if anything pops up in the json request
-            if "errors" in data:
-                print(f"GraphQL error: {data['errors']}")
-                raise HTTPException(status_code=400, detail=data["errors"])
-
-            # set the cache data
-            set_cache(cache_key, data, CATEGORIES_CACHE_TTL_SECONDS)
-
-            # otherwise return the data
-            return data
-
-        except httpx.HTTPStatusError as error:
-            raise HTTPException(status_code=404, detail=f"The error is: {error}")
+    # otherwise return the data
+    return data
 
 
 # route to get the popular anime from Ani-list
@@ -195,48 +278,13 @@ async def get_anime_popular():
         return cached_data
 
     # send the query with the variables to get teh popular anime
-    async with httpx.AsyncClient() as client:
-        # make a post request to the Ani-list api
-        try:
-            response = await client.post(
-                "https://graphql.anilist.co",
-                json={"query": query, "variables": variables},
-                headers={"Content-Type": "application/json"},
-            )
-            # print the response to check
-            print(response)
-            # show the status if all goes good
-            response.raise_for_status()
+    async with httpx.AsyncClient(timeout=ANILIST_TIMEOUT) as client:
+        data = await _post_to_anilist(client, query, variables)
 
-            # package the data to send back to the frontend
-            data = response.json()  # turn the data into json to send off
+    set_cache(cache_key, data, POPULAR_CACHE_TTL_SECONDS)
 
-            # handle the errors if anything pops up
-            if "errors" in data:
-                print(f"GraphQL error: {data['errors']}")
-                raise HTTPException(status_code=400, detail=data["errors"])
-
-            set_cache(cache_key, data, POPULAR_CACHE_TTL_SECONDS)
-
-            # return the data
-            return data
-
-        # log the error if it fails
-        # handle if the status code is not 200
-        except httpx.HTTPStatusError as error:
-            raise HTTPException(
-                status_code=500,
-                detail=str(
-                    f"There was an error: {error.response.status_code} - {error.response.text}"
-                ),
-            )
-
-        # handle if the request fails
-        except httpx.RequestError as error:
-            raise HTTPException(
-                status_code=500,
-                detail=str(f"There was an error in the request sent: {error}"),
-            )
+    # return the data
+    return data
 
 
 # route to get the trending anime from Ani-list
@@ -286,45 +334,13 @@ async def get_anime_trending():
         return cached_data
 
     # send the query to the Ani-list api
-    async with httpx.AsyncClient() as client:  # use httpx to make the request to handle everything about the request
-        # make a post request to the Ani-list api
-        try:
-            response = await client.post(
-                "https://graphql.anilist.co",
-                # pass in the query and the varibales to get the items and the amount of items we want fetched
-                json={"query": query, "variables": variables},
-                # set the content type to json
-                headers={"Content-Type": "application/json"},
-            )
-            # show the response if it works
-            print(response)
-            response.raise_for_status()  # raise an exception for bad status codes (4xx or 5xx)
+    async with httpx.AsyncClient(timeout=ANILIST_TIMEOUT) as client:
+        data = await _post_to_anilist(client, query, variables)
 
-            # package the data in a variable to send
-            data = response.json()
+    set_cache(cache_key, data, TRENDING_CACHE_TTL_SECONDS)
 
-            # handle errors in QL data fetched
-            if "errors" in data:
-                print(f"GraphQL error: {data['errors']}")
-                raise HTTPException(status_code=400, detail=data["errors"])
-
-            set_cache(cache_key, data, TRENDING_CACHE_TTL_SECONDS)
-
-            # return the data
-            return data
-
-        # log the error if it fails
-        # handle if the status code is not 200
-        except httpx.HTTPStatusError as e:
-            raise HTTPException(
-                status_code=500,
-                detail=str(
-                    f"There was an error: {e.response.status_code} - {e.response.text}"
-                ),
-            )
-        # handle if the request fails
-        except httpx.RequestError as e:
-            raise HTTPException(status_code=500, detail=str(f"Request error: {e}"))
+    # return the data
+    return data
 
 
 # Route to get the top anime from anilist
@@ -366,47 +382,13 @@ async def get_anime_top():  # NOTE: may add in param from the frontend if needed
         return cached_data
 
     # make the call to get the data
-    async with httpx.AsyncClient() as client:
-        try:
-            # try to connect get the data from ani-list
-            response = await client.post(
-                "https://graphql.anilist.co",
-                json={"query": query, "variables": variables},
-                headers={"Content-Type": "application/json"},
-            )
+    async with httpx.AsyncClient(timeout=ANILIST_TIMEOUT) as client:
+        data = await _post_to_anilist(client, query, variables)
 
-            # test out the fetch
-            print(f"Test for the response for /anime/top:{response.content}")
-            # raise an error if status isn't successful
-            response.raise_for_status()
+    set_cache(cache_key, data, TOP_CACHE_TTL_SECONDS)
 
-            # package the data to send of if no error occurs
-            data = response.json()
-
-            # check if there is an error in the response I get back
-            if "errors" in data:
-                # print to the console
-                print(f"Here is the error in the data:{data['errors']}")
-                # raise an error close the func
-                raise HTTPException(status_code=400, detail=data["errors"])
-
-            set_cache(cache_key, data, TOP_CACHE_TTL_SECONDS)
-
-            # return the data to the frontend if the fetch was successful
-            return data
-
-        # check for status_code error
-        except httpx.HTTPStatusError as e:
-            raise HTTPException(
-                status_code=500,
-                detail=str(f"There was an error in the status code {e}"),
-            )
-
-        # check if there was an error in Request
-        except httpx.RequestError as e:
-            raise HTTPException(
-                status_code=404, detail=str(f"There was an error getting the data:{e}")
-            )
+    # return the data to the frontend if the fetch was successful
+    return data
 
 
 # TODO: MAKE A ROUTE TO GET ANIME THAT MATCHES A SPECIFIC NAME
@@ -486,26 +468,10 @@ async def get_anime_by_id(
         return cached_data
 
     # send the query to the Ani-list api
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post(
-                "https://graphql.anilist.co",
-                json={"query": query, "variables": variables},
-                headers={"Content-Type": "application/json"},
-            )
-            response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx) if one happens
-            data = response.json()
+    async with httpx.AsyncClient(timeout=ANILIST_TIMEOUT) as client:
+        data = await _post_to_anilist(client, query, variables)
 
-            set_cache(cache_key, data, ANIME_BY_ID_CACHE_TTL_SECONDS)
+    set_cache(cache_key, data, ANIME_BY_ID_CACHE_TTL_SECONDS)
 
-            # return the data needed for the anime pages
-            return data
-
-        # More specific error handling
-        except httpx.HTTPStatusError as e:
-            raise HTTPException(
-                status_code=e.response.status_code,
-                detail=f"AniList API error: {e.response.text}",
-            )
-        except httpx.RequestError as e:
-            raise HTTPException(status_code=500, detail=f"Request error: {e}")
+    # return the data needed for the anime pages
+    return data

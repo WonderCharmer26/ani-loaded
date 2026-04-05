@@ -4,6 +4,7 @@
 
 import { AniListMedia } from "../schemas/animeSchemas";
 import { Link } from "react-router-dom";
+import { Plus } from "lucide-react";
 
 // showcases anime images and the title
 export const AnimeCard = ({
@@ -24,7 +25,7 @@ export const AnimeCard = ({
           // NOTE: this changes the height of the cards
           className="w-full h-105 object-cover border-2 border-black rounded-2xl"
         />
-        <div className="font-[Inter] mt-2 font-semibold text-[13px] h-12 text-center overflow-hidden cursor-pointer">
+        <div className="font-[Inter] mt-2 font-semibold text-[13px] h-12 text-center overflow-hidden cursor-pointer transition-opacity duration-200 group-hover:opacity-0">
           {/* make sure that the titles are only showed up to a certain amount */}
           {anime.title.english
             ? anime.title.english.split(" ").slice(0, 6).join(" ")
@@ -48,6 +49,12 @@ export const AnimeCard = ({
           <div className="absolute bottom-17 left-2">
             <div className="flex h-14 w-14 items-center justify-center rounded-4xl border-[6px] border-[#3CB4FF] text-2xl font-bold mr-2">
               {anime.averageScore}
+            </div>
+          </div>
+          {/* TODO: ADD MORE ICONS FOR HOVER STATE */}
+          <div className="absolute bottom-2 left-4 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+            <div className="flex h-10 w-10 items-center justify-center bg-black/50 text-white">
+              <Plus size={25} />
             </div>
           </div>
         </div>

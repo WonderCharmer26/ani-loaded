@@ -1,11 +1,11 @@
 import type { QueryClient } from "@tanstack/react-query";
-import { getUserTopLists } from "../api/userListsService";
+import { getUsersTopLists } from "../api/userListsService";
 
-export function listsPageLoader(queryClient: QueryClient, userId: string) {
+export function listsPageLoader(queryClient: QueryClient, userToken: string) {
   return async () => {
     await queryClient.ensureQueryData({
-      queryKey: ["userTopLists", userId],
-      queryFn: () => getUserTopLists(userId),
+      queryKey: ["userTopLists", userToken],
+      queryFn: () => getUsersTopLists(userToken),
     });
     return null;
   };

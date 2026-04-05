@@ -9,6 +9,7 @@ import {
 } from "../services/api/discussionService";
 import type { DiscussionsCategories } from "../schemas/discussion";
 import DiscussionCard from "../components/DiscussionCard";
+import LinkButton from "@/components/CreateButton";
 
 // NOTE: refresh triggered on DiscussionSubmitPage
 
@@ -50,12 +51,7 @@ export default function DiscussionPage() {
           recommendations.
         </p>
         <div className="flex items-center justify-end gap-2 w-full">
-          <Link
-            to={"/discussion/submit"}
-            className="py-3 font-bold px-3.5 rounded-xl bg-black"
-          >
-            New +
-          </Link>
+          <LinkButton link="/discussion/submit" word="Create" />
         </div>
       </section>
 
