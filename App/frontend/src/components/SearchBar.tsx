@@ -97,21 +97,18 @@ export const SearchBar = () => {
 
   return (
     <div className="relative">
-      <div className="ml-1.5 bg-[#1F1F1F] text-neutral-300 rounded-2xl h-[1.875rem] w-[16rem] flex items-center justify-between px-2">
-        <div className="pl-0.5">
-          <Search />
-        </div>
+      <div className="ml-1.5 border border-slate-700 bg-slate-900 text-slate-300 rounded-2xl h-[1.875rem] w-[16rem] flex items-center gap-2 px-3 focus-within:border-slate-500 transition-colors">
+        <Search size={16} className="shrink-0 text-slate-500" />
         <input
-          className="outline-none bg-transparent text-sm w-full"
-          placeholder="search anime..."
+          className="outline-none bg-transparent text-sm w-full placeholder-slate-500"
+          placeholder="Search anime..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
       </div>
       {showSuggestionPanel && (
-        <div className="absolute z-100 left-0 right-0 mt-1 bg-black text-xs rounded-lg shadow-lg border border-gray-800 overflow-hidden">
+        <div className="absolute z-100 left-0 right-0 mt-1 bg-slate-900 text-xs rounded-lg shadow-lg border border-slate-700 overflow-hidden">
           {isFetching && !suggestions.length ? (
-            // TODO: add loading dots animation
             <p className="px-3 py-2 text-slate-400">Searching...</p>
           ) : suggestions.length ? (
             suggestions.map((anime) => {
@@ -123,9 +120,8 @@ export const SearchBar = () => {
                 "Untitled";
               return (
                 <Link
-                  to={`/anime/${anime.id}`} // navigates to a specific anime page
+                  to={`/anime/${anime.id}`}
                   key={`suggestion-${anime.id}`}
-                  type="button"
                   onClick={() => handleSuggestionClick()}
                   className="flex items-center gap-3 w-full px-3 py-3 text-left text-slate-100 hover:bg-[#0d3853] transition-colors"
                 >

@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import type { Discussion } from "../schemas/discussion";
+import UpvoteButton from "./UpvoteButton";
 
 export default function DiscussionCard({ thread }: { thread: Discussion }) {
 
@@ -22,10 +23,10 @@ export default function DiscussionCard({ thread }: { thread: Discussion }) {
             {titlePreview}
           </h3>
 
-          <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-            <span>
-              {thread.comment_count} replies · {thread.season_number} likes
-            </span>
+          <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+            <span>{thread.comment_count} replies</span>
+            <span>·</span>
+            <UpvoteButton discussionId={thread.id} initialCount={thread.upvote_count} />
           </div>
         </div>
 

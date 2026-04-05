@@ -1,22 +1,17 @@
 import type { QueryClient } from "@tanstack/react-query";
-import {
-  getAllDiscussions,
-  getDiscussionThreads,
-} from "../api/discussionService";
+import { getAllDiscussions } from "../api/discussionService";
 
 // preloader to help with discussion page data fetching
 export function discussionPageLoader(queryClient: QueryClient) {
   return async () => {
-    await Promise.all([
-      queryClient.ensureQueryData({
-        queryKey: ["discussionThreads"],
-        queryFn: getAllDiscussions,
-      }),
-      // queryClient.ensureQueryData({
-      //   queryKey: ["discussionTopics"],
-      //   queryFn: getTrendingTopics,
-      // }),
-    ]);
+    try {
+      await queryClient.ensureQueryData({
+        queryKey: ["discussions", {}],
+        queryFn: () => getAllDiscussions(),
+      });
+    } catch {
+      // Keep route navigation working even if prefetch fails.
+    }
     return null;
   };
 }

@@ -1,93 +1,89 @@
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { SearchBar } from "./SearchBar";
 import { Menu } from "lucide-react";
 import AniLoadedLogo from "../assets/images/Ani-Loaded Logo.svg";
-import { useState, useEffect } from "react";
-import { supabase } from "../services/supabase/supabaseConnection";
-import { User } from "@supabase/supabase-js";
 import { useAuthContext } from "@/services/supabase/hooks/AuthProvider";
 
+interface NavbarLink {
+  id: number;
+  label: string;
+  link: string;
+}
+
+const navbarLinks: NavbarLink[] = [
+  { id: 1, label: "HOME", link: "/" },
+  { id: 2, label: "DISCUSSIONS", link: "/discussions" },
+  { id: 3, label: "LISTS", link: "/lists" },
+  { id: 4, label: "ANIME", link: "/anime" },
+  { id: 5, label: "RECOMMENDATION", link: "/recommendations" },
+];
+
 export const Navbar = () => {
-  // get the user data
-  const { user, loading } = useAuthContext();
-
-  interface NavbarLinksI {
-    id: number;
-    label: string;
-    link: string;
-    active?: boolean; // gonna use to help with showing the user which page they are on
-  }
-
-  const navbarLinks: NavbarLinksI[] = [
-    { id: 1, label: "HOME", link: "/" },
-    { id: 2, label: "DISCUSSIONS", link: "/discussions" },
-    { id: 3, label: "LISTS", link: "/lists" },
-    { id: 4, label: "ANIME", link: "/anime" },
-    { id: 5, label: "RECOMMENDATION", link: "/recommendations" },
-  ];
-
-  // account for loading user data like pfp's
+  const { user } = useAuthContext();
+  const { pathname } = useLocation();
 
   return (
-    // NOTE: Space between the navbar and the rest of the content changable by the mt-4
     <nav className="flex relative pt-5 z-50 top-0 w-full h-[2.875rem] items-center justify-between text-white">
-      {" "}
-      {/* TODO: replace with the real logo of the application */}
-      <div className="h-25 w-25">
+      {/* Logo */}
+      <Link to="/" className="h-25 w-25 shrink-0">
         <img src={AniLoadedLogo} alt="Site Logo" />
-      </div>
-      {/* navlink section */}
-      <div className="flex items-center flex-row">
-        <ol className="flex flex-row">
-          {navbarLinks.map((items: NavbarLinksI) => (
-            // TODO: might make the spacing between the links slightly wider
-            <li key={items.id} className="px-3">
-              <Link to={items.link}>
-                <p className="navbar-text hover:text-[#3CB4FF] transition-colors duration-300">
-                  {items.label}
-                </p>
-              </Link>
-            </li>
-          ))}
+      </Link>
+
+      {/* Nav links + search */}
+      <div className="flex items-center">
+        <ol className="flex">
+          {navbarLinks.map((item) => {
+            const isActive =
+              item.link === "/"
+                ? pathname === "/"
+                : pathname.startsWith(item.link);
+
+            return (
+              <li key={item.id} className="px-3">
+                <Link to={item.link}>
+                  <p
+                    className={`navbar-text transition-colors duration-300 ${
+                      isActive
+                        ? "text-[#3CB4FF]"
+                        : "hover:text-[#3CB4FF]"
+                    }`}
+                  >
+                    {item.label}
+                  </p>
+                </Link>
+              </li>
+            );
+          })}
         </ol>
-        {/* add search box in here */}
         <SearchBar />
       </div>
-      {/* TODO: Add User Icon */}
-      <div className="flex items-center">
-        <div className="flex flex-row mr-2">
-          {user ? (
-            <Link to="/profile">
-              <button className="bg-[#0066a5] cursor-pointer font-semibold text-white px-3.5 py-1.5 rounded-4xl ml-2">
-                Profile
-              </button>
-            </Link>
-          ) : (
-            <Link to="/auth/login">
-              <button className="bg-[#0066a5] cursor-pointer font-semibold text-white px-3.5 py-1.5 rounded-4xl ml-2">
-                Sign In
-              </button>
-            </Link>
-          )}
-        </div>
+
+      {/* Auth section */}
+      <div className="flex items-center gap-3">
         {user ? (
-          <div className="flex items-center space-x-2">
-            <span className="text-white text-sm">
+          <Link to="/profile" className="flex items-center gap-2 group">
+            <span className="text-sm font-semibold text-slate-300 group-hover:text-white transition-colors">
               {user.user_metadata?.username || "User"}
             </span>
-            <Link to="/profile">
-              <img
-                src={
-                  user.user_metadata?.avatar_url ||
-                  "https://api.dicebear.com/7.x/avataaars/svg?seed=default"
-                }
-                alt="User Avatar"
-                className="w-8 h-8 rounded-full object-cover border-2 border-gray-600 hover:border-gray-400 cursor-pointer"
-              />
-            </Link>
-          </div>
+            <img
+              src={
+                user.user_metadata?.avatar_url ||
+                "https://api.dicebear.com/7.x/avataaars/svg?seed=default"
+              }
+              alt="Avatar"
+              className="w-8 h-8 rounded-full object-cover border-2 border-slate-600 group-hover:border-[#3CB4FF] transition-colors"
+            />
+          </Link>
         ) : (
-          <Menu size={30} />
+          <>
+            <Link
+              to="/auth/login"
+              className="bg-[#0066a5] font-semibold text-white px-3.5 py-1.5 rounded-4xl hover:opacity-90 transition-opacity"
+            >
+              Sign In
+            </Link>
+            <Menu size={30} className="text-slate-400" />
+          </>
         )}
       </div>
     </nav>
