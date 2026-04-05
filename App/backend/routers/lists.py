@@ -1,15 +1,20 @@
-import re
 from dotenv import load_dotenv
 from fastapi import APIRouter, Header
 from fastapi.exceptions import HTTPException
 from gotrue import Optional
 from gotrue.types import User
-from httpx import Request
 
 from database.supabase_client import supabase
 
 from routers.discussions import validate_anime_exists
-from schemas.lists import UserListCreate, UserListSuccessMessage, UserListUpdate, UserListWithAllAnime, UserListResponseWrapper, SpecificUserListWithAnime
+from schemas.lists import (
+    UserListCreate,
+    UserListSuccessMessage,
+    UserListUpdate,
+    UserListWithAllAnime,
+    UserListResponseWrapper,
+    SpecificUserListWithAnime,
+)
 from utilities.auth_validator import auth_validator
 from utilities.anilist_client import fetch_anilist_media_map
 
@@ -110,15 +115,15 @@ async def get_all_lists():
         )
 
         if not res.data:
-            raise HTTPException(
-                status_code=404, detail="No lists found"
-            )
+            raise HTTPException(status_code=404, detail="No lists found")
 
         rows_with_usernames = normalize_owner_username(res.data)
         hydrated = await attach_anime_to_list_entries(rows_with_usernames)
 
         # validate all the items in the list
-        validated_list = [UserListWithAllAnime.model_validate(item) for item in hydrated]
+        validated_list = [
+            UserListWithAllAnime.model_validate(item) for item in hydrated
+        ]
 
         return validated_list
 
@@ -128,21 +133,29 @@ async def get_all_lists():
             detail=f"There was an error: {e}",
         )
 
+
 # this route doesn't need to be protected
 @router.get("/list/{list_id}", response_model=SpecificUserListWithAnime)
-async def get_specific_list(list_id : str, authorization: Optional[str] = Header(None)):
+async def get_specific_list(list_id: str, authorization: Optional[str] = Header(None)):
     user: User | None = None
     # check the user
 
     if authorization:
         user = auth_validator(authorization)
-       
+
     # try to make a req to get the specific list data and the entries
     try:
-        res = supabase.table("user_list").select("*, user_list_entry(*)").eq("id", list_id).execute()
+        res = (
+            supabase.table("user_list")
+            .select("*, user_list_entry(*)")
+            .eq("id", list_id)
+            .execute()
+        )
 
         if not res.data:
-            raise HTTPException(status_code=404, detail="Could not find this specific list")
+            raise HTTPException(
+                status_code=404, detail="Could not find this specific list"
+            )
 
         row = res.data[0]
 
@@ -161,40 +174,43 @@ async def get_specific_list(list_id : str, authorization: Optional[str] = Header
         final_stamp = {**hydrated_row, "is_owner": is_owner}
 
         # validate all the items in the list
-        return SpecificUserListWithAnime.model_validate(final_stamp) 
-
+        return SpecificUserListWithAnime.model_validate(final_stamp)
 
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"There was an error: {e}")
 
+
 @router.patch("/list/{list_id}", response_model=UserListSuccessMessage)
-async def change_specific_list(list_id: str, payload: UserListUpdate, authorization: str = Header(...)):
+async def change_specific_list(
+    list_id: str, payload: UserListUpdate, authorization: str = Header(...)
+):
     # check the token (handles raising errors)
     user: User = auth_validator(authorization)
 
     try:
         # make the update if the owner_id and list_id matches
         (
-          supabase.rpc("update_list_and_entries", {
-                'p_list_id': list_id,
-                'p_user_id': user.id,
-                'p_title': payload.list_data.title,
-                'p_description': payload.list_data.description,
-                'p_entries': [
-                    entry.model_dump() for entry in payload.entries
-                ]
-            })
+            supabase.rpc(
+                "update_list_and_entries",
+                {
+                    "p_list_id": list_id,
+                    "p_user_id": user.id,
+                    "p_title": payload.list_data.title,
+                    "p_description": payload.list_data.description,
+                    "p_entries": [entry.model_dump() for entry in payload.entries],
+                },
+            )
         ).execute()
 
-        return {'message': 'The list and entries have been updated'}
+        return {"message": "The list and entries have been updated"}
 
-        
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update your list: {e}")
+
 
 # route for deleting lists
 @router.delete("/list/{list_id}", response_model=UserListSuccessMessage)
@@ -203,18 +219,26 @@ async def delete_specific_list(list_id: str, authorization: str = Header(...)):
     user: User = auth_validator(authorization)
 
     try:
-        res = supabase.table('user_list').delete().eq("id", list_id).eq("owner_id", user.id).execute()
+        res = (
+            supabase.table("user_list")
+            .delete()
+            .eq("id", list_id)
+            .eq("owner_id", user.id)
+            .execute()
+        )
 
         if not res.data:
-            raise HTTPException(status_code=404, detail="List could not be deleted it was not found")
+            raise HTTPException(
+                status_code=404, detail="List could not be deleted it was not found"
+            )
 
-        return {"message" : "Your list has been succesfully deleted "}
+        return {"message": "Your list has been succesfully deleted "}
 
     except HTTPException:
         raise
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to delete your list: {e}") 
+        raise HTTPException(status_code=500, detail=f"Failed to delete your list: {e}")
 
 
 # protected route (get users lists shown on profile page)

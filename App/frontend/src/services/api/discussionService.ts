@@ -1,4 +1,3 @@
-import "axios";
 import axios from "axios";
 import {
   Discussion,
@@ -8,7 +7,6 @@ import {
   DiscussionResponse,
 } from "../../schemas/discussion";
 import { backendUrl } from "./fetchAnimes";
-import { useAuthContext } from "../supabase/hooks/AuthProvider";
 import { supabase } from "../supabase/supabaseConnection";
 import { toast } from "sonner";
 
@@ -94,14 +92,14 @@ export async function submitDiscussion({
   // store the token
   const token = sessionData.session?.access_token;
 
-  if (!token) {
-    toast.info("Please make sign in to make a post");
-    throw new Error("Make sure you're signed in");
-  }
-
   if (error) {
     toast.error(`There was an error: ${error}`);
     throw new Error("There was an error validating your session");
+  }
+
+  if (!token) {
+    toast.info("Please make sign in to make a post");
+    throw new Error("Make sure you're signed in");
   }
 
   // send to the form to the backend for backend to handle validating
