@@ -9,6 +9,7 @@ import { AnimeBanner } from "../components/AnimeBanner";
 import { AnimeBannerSkeleton } from "../components/skeleton/AnimeBannerSkeleton";
 import { useEffect } from "react";
 import { sanitizeHtml } from "../utilities/htmlUtils";
+import { ApiServiceError } from "../components/ApiServiceError";
 
 // TODO: USE ANILIST RECOMMENDATION EDGE TO HELP WITH GIVING RECOMMENDATIONS FOR EACH OF THE DIFFERENT ANIME ON THE INFO PAGE
 
@@ -24,17 +25,26 @@ export default function AnimeInfoPage() {
   }, [anime_id]);
 
   // function gets the anime info
-  const { data, isFetched, isLoading, isError } = useQuery<AniListMedia, Error>(
-    {
-      queryKey: ["animeInfo", anime_id],
-      queryFn: () => getAnimeInfo(anime_id),
-      enabled: isValidAnimeId,
-    },
-  );
+  const {
+    data,
+    isFetched,
+    isLoading,
+    isError,
+    error,
+    refetch: refetchAnimeInfo,
+  } = useQuery<AniListMedia, Error>({
+    queryKey: ["animeInfo", anime_id],
+    queryFn: () => getAnimeInfo(anime_id),
+    enabled: isValidAnimeId,
+  });
 
   // make a query to get the trending anime
   // WARNING: make error states and loading states
-  const { data: trendingAnime } = useQuery<AniListMedia[], Error>({
+  const {
+    data: trendingAnime,
+    error: trendingError,
+    refetch: refetchTrending,
+  } = useQuery<AniListMedia[], Error>({
     queryKey: ["trendingAnime"],
     queryFn: getTrending,
   });
@@ -49,7 +59,27 @@ export default function AnimeInfoPage() {
 
   // error handling
   if (isError) {
-    return <p>there was an error</p>;
+    return (
+      <ApiServiceError
+        title="AniList is temporarily unavailable"
+        message={error?.message ?? "Failed to load anime details."}
+        onRetry={() => {
+          void refetchAnimeInfo();
+        }}
+      />
+    );
+  }
+
+  if (trendingError) {
+    return (
+      <ApiServiceError
+        title="AniList is temporarily unavailable"
+        message={trendingError.message}
+        onRetry={() => {
+          void refetchTrending();
+        }}
+      />
+    );
   }
 
   // skeleton to show for the banner

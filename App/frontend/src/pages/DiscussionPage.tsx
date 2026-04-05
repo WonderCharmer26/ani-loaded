@@ -1,10 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import type { Discussion } from "../schemas/discussion";
-import {
-  getAllDiscussions,
-} from "../services/api/discussionService";
+import { getAllDiscussions } from "../services/api/discussionService";
 import DiscussionCard from "../components/DiscussionCard";
+import LinkButton from "@/components/CreateButton";
 
 // NOTE: refresh triggered on DiscussionSubmitPage
 
@@ -37,12 +36,7 @@ export default function DiscussionPage() {
           recommendations.
         </p>
         <div className="flex items-center justify-end gap-2 w-full">
-          <Link
-            to={"/discussion/submit"}
-            className="py-3 font-bold px-3.5 rounded-xl bg-black"
-          >
-            New +
-          </Link>
+          <LinkButton link="/discussion/submit" word="Create" />
         </div>
       </section>
 

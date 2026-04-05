@@ -1,84 +1,166 @@
 // TODO: Ensure that real data is later fetched from the backend
-import type { AniListMedia } from "../../schemas/animeSchemas";
-import type { UserAnimeList } from "../../schemas/userLists";
+import axios from "axios";
+import { backendUrl } from "./fetchAnimes";
+import { toast } from "sonner";
+import type {
+  UserListRequest,
+  UserListResponse,
+  UserListResponseWrapper,
+  UserListUpdateRequest,
+} from "@/schemas/zod/listFormSchema";
+import { UserListUpdateSchema } from "@/schemas/zod/listFormSchema";
+import { supabase } from "../supabase/supabaseConnection";
 
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+// NOTE: Get Functions
 
-const placeholderCover =
-  "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=400&q=80";
+// function to get all users lists that are public
+export const getAllLists = async (): Promise<UserListResponse[]> => {
+  // get the data from the backend
+  const response = await axios.get<UserListResponse[]>(`${backendUrl}/lists`);
 
-const buildMockAnime = (
-  id: number,
-  title: string,
-  genres: string[],
-): AniListMedia => ({
-  id,
-  title: { english: title },
-  episodes: 12,
-  coverImage: {
-    large: placeholderCover,
-    medium: placeholderCover,
-  },
-  genres,
-  description: "Placeholder description for future API data.",
-  averageScore: 80,
-  status: "FINISHED",
-  studios: { nodes: [] },
-  characters: { edges: [] },
-});
+  if (!response.data) {
+    toast.error("There was an error getting all the anime lists");
+    throw new Error("There was an error getting all the anime lists");
+  }
 
-const mockLists: UserAnimeList[] = [
-  {
-    id: "list-1",
-    title: "All-Time Favorites",
-    description: "The shows I recommend to every new fan.",
-    ownerId: "demo-user",
-    visibility: "public",
-    updatedAt: new Date().toISOString(),
-    entries: [
-      buildMockAnime(1, "Fullmetal Alchemist: Brotherhood", ["Action"]),
-      buildMockAnime(2, "Mob Psycho 100", ["Comedy", "Action"]),
-      buildMockAnime(3, "Fruits Basket", ["Drama"]),
-      buildMockAnime(4, "Ping Pong the Animation", ["Sports"]),
-      buildMockAnime(5, "Violet Evergarden", ["Drama"]),
-    ].map((anime, idx) => ({
-      id: `list-1-entry-${idx + 1}`,
-      rank: idx + 1,
-      anime,
-    })),
-  },
-  {
-    id: "list-2",
-    title: "Current Season Watchlist",
-    description: "Keeping tabs on what to binge once it finishes airing.",
-    ownerId: "demo-user",
-    visibility: "private",
-    updatedAt: new Date().toISOString(),
-    entries: [
-      buildMockAnime(6, "Dungeon Food", ["Fantasy"]),
-      buildMockAnime(7, "Blue Box", ["Romance"]),
-    ].map((anime, idx) => ({
-      id: `list-2-entry-${idx + 1}`,
-      rank: idx + 1,
-      anime,
-    })),
-  },
-];
+  // let the page map out the data
+  return response.data;
+};
 
-export async function getUserTopLists(
-  userId: string,
-): Promise<UserAnimeList[]> {
-  await delay(200);
-  return mockLists.filter(
-    (list) => list.ownerId === userId || list.visibility === "public",
+// function to get specific list
+export const getSpecificList = async (
+  list_id: string,
+): Promise<UserListResponse> => {
+  // get the session id
+  const { data } = await supabase.auth.getSession();
+
+  const userToken = data.session?.access_token;
+
+  const headers = userToken
+    ? { Authorization: `Bearer ${userToken}` }
+    : undefined;
+
+  const response = await axios.get<UserListResponse>(
+    `${backendUrl}/list/${list_id}`,
+    { headers },
   );
-}
 
-export async function createListPlaceholder(
-  _userId: string,
-  _title: string,
-): Promise<void> {
-  // TODO: connect to Supabase mutation once backend is ready.
-  await delay(100);
-}
+  // handle error
+  if (!response.data) {
+    toast.error("There was an error getting this specific list");
+    throw new Error("There was an error getting this list data");
+  }
 
+  return response.data;
+};
+
+// function to get the users current lists
+export const getUsersTopLists = async (
+  userToken: string | null,
+): Promise<UserListResponseWrapper[]> => {
+  // check if user is logged in
+  if (!userToken) {
+    toast.error("Please make sure your logged in order to view your lists");
+  }
+
+  const response = await axios.get<UserListResponseWrapper[]>(
+    `${backendUrl}/user-list`,
+    {
+      headers: { Authorization: `Bearer ${userToken}` },
+    },
+  );
+
+  if (!response.data) {
+    toast.error("There was an error getting your lists");
+    throw new Error("There was an error getting your lists");
+  }
+
+  return response.data;
+};
+
+// function to get all the popular lists
+export const getPopularLists = async (): Promise<UserListResponseWrapper[]> => {
+  const response = await axios.get<UserListResponseWrapper[]>(
+    `${backendUrl}/popular-lists`,
+  );
+
+  if (!response.data) {
+    toast.error("There was an error getting popular lists");
+    throw new Error("There was an error getting popular lists");
+  }
+
+  return response.data;
+};
+
+//NOTE: POST FUNCTIONS
+export const postUserList = async (
+  formData: UserListRequest, // packaged on the ListSubmitPage
+  token: string,
+): Promise<UserListResponse> => {
+  // validate the form before senfing to the backend (lists page handles this as well)
+  // might add a response type
+  const response = await axios.post<UserListResponseWrapper>(
+    `${backendUrl}/create-list`,
+    formData,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+
+  if (!response.data) {
+    toast.error("There was an error getting popular lists");
+    throw new Error("There was an error getting popular lists");
+  }
+
+  return response.data.list;
+};
+
+// NOTE: DELETE FUNCTIONS
+export const deleteList = async (list_id: string): Promise<{ message: string }> => {
+  const { data } = await supabase.auth.getSession();
+  const userToken = data.session?.access_token;
+
+  if (!userToken) {
+    toast.error("Please log in to delete your list");
+    throw new Error("Missing auth token for list deletion");
+  }
+
+  const response = await axios.delete<{ message: string }>(
+    `${backendUrl}/list/${list_id}`,
+    { headers: { Authorization: `Bearer ${userToken}` } },
+  );
+
+  return response.data;
+};
+
+// NOTE: PATCH FUNCTIONS
+export const updateList = async (
+  list_id: string | undefined,
+  formChanges: UserListUpdateRequest,
+): Promise<{ message: string }> => {
+  const validatedFormChanges = UserListUpdateSchema.parse(formChanges);
+
+  // for auth check
+  const { data } = await supabase.auth.getSession();
+  const userToken = data.session?.access_token;
+
+  if (!userToken) {
+    toast.error("Please log in to update your list");
+    throw new Error("Missing auth token for list update");
+  }
+
+  const response = await axios.patch(
+    `${backendUrl}/list/${list_id}`,
+    validatedFormChanges,
+    { headers: { Authorization: `Bearer ${userToken}` } },
+  );
+
+  if (!response.data) {
+    toast.error("There was an error changing your list");
+    throw new Error("There was an error changing your list");
+  }
+
+  return response.data;
+};

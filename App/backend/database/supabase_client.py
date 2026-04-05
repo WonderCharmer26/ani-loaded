@@ -1,3 +1,5 @@
+# TODO: Gonna change to async client instead to help future scalling later on
+
 # this has the set up for supabase
 import os
 from supabase import create_client, Client

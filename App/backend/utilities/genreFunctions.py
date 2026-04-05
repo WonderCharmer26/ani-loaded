@@ -2,6 +2,7 @@
 import asyncio  # might only import the methods that I need
 import httpx  # might only import the methods that I need
 import time  # might only import the methods that I need
+from fastapi import HTTPException
 
 # Variables for the url and the timer for the cache
 ANILIST_URL = "https://graphql.anilist.co"
@@ -27,13 +28,31 @@ query GetGenre {
 # async function to get the anime from anilist
 async def fetch_genres() -> list[str]:
     # use httpx to make open a request to anilist
-    async with httpx.AsyncClient(timeout=15) as client:
-        # make a post request to anilist
-        response = await client.post(ANILIST_URL, json={"query": GENRE_QUERY})
-        response.raise_for_status()  # check the status for the request
-        data = response.json()  # format into json
-        # return the genre choices
-        return data["data"]["GenreCollection"]
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=5.0)) as client:
+            # make a post request to anilist
+            response = await client.post(ANILIST_URL, json={"query": GENRE_QUERY})
+            response.raise_for_status()  # check the status for the request
+            data = response.json()  # format into json
+    except httpx.HTTPStatusError as error:
+        status = error.response.status_code
+        if status in {401, 403, 429} or status >= 500:
+            raise HTTPException(
+                status_code=503,
+                detail="AniList genre service is temporarily unavailable.",
+            )
+        raise HTTPException(
+            status_code=502,
+            detail="AniList returned an invalid genre response.",
+        )
+    except (httpx.RequestError, ValueError):
+        raise HTTPException(
+            status_code=503,
+            detail="Unable to fetch genres from AniList right now.",
+        )
+
+    # return the genre choices
+    return data["data"]["GenreCollection"]
 
 
 # function to get the cached data from the sever if it exists
@@ -52,6 +71,7 @@ async def get_cached_genre() -> list[str]:
 
     # if the cache is valid then return the genre cache so that it can be updated
     if cache_is_valid:
+        assert _genre_cache is not None
         return _genre_cache
 
     # double check again (using lock to help make a safe request again)
@@ -67,6 +87,7 @@ async def get_cached_genre() -> list[str]:
         )
         # return if valid
         if cache_is_valid:
+            assert _genre_cache is not None
             return _genre_cache
 
         # other wise fetch the genres

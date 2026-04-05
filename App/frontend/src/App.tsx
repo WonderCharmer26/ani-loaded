@@ -22,7 +22,7 @@ import { homePageFetcher } from "./services/loaders/homePageLoader";
 import { animeInfoPrefetcher } from "./services/loaders/animeInfoPrefetcher";
 import { queryClient } from "./services/clients/queryClient";
 import { discussionPageLoader } from "./services/loaders/discussionPageLoader";
-import { listsPageLoader } from "./services/loaders/listsPageLoader";
+// import { listsPageLoader } from "./services/loaders/listsPageLoader";
 import { animeCategoriesLoader } from "./services/loaders/animeCategoriesLoader";
 import { recommendationsPageLoader } from "./services/loaders/recommendationsPageLoader";
 import DiscussionInfoPage from "./pages/DiscussionInfoPage";
@@ -31,9 +31,14 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import DiscussionSubmitPage from "./pages/DiscussionSubmitPage";
 import { AuthProvider } from "./services/supabase/hooks/AuthProvider";
 import { Toaster } from "sonner";
+import ListSubmitPage from "./pages/ListSubmitPage";
+import ListInfoPage from "./pages/ListInfoPage";
+
+// TODO: ADJUST THE TOASTER POSITIONING FOR THE APP
 
 // Fetching functions to get data for the HomePage
 const demoUserId = "demo-user"; // TODO: plug in real user data, supabase useAuth might handle this for me
+const demoUserToken = "demo-user-token"; // TODO: replace with real auth token from session
 // NOTE: might use supabase.auth.getUser to help with getting data for protected routes
 //
 // Create router configuration with layouts
@@ -74,7 +79,17 @@ const router = createBrowserRouter([
         // TODO: Replace with the actual data fetching functions
         path: "lists",
         element: <ListsPage />,
-        loader: listsPageLoader(queryClient, demoUserId),
+        // set up the loader when fetch set up
+        // loader: listsPageLoader(queryClient, demoUserToken),
+      },
+      {
+        path: "list/create",
+        element: <ListSubmitPage />,
+        // add loader later
+      },
+      {
+        path: "list/:id",
+        element: <ListInfoPage />,
       },
       {
         // Anime Page: Shows all the different Anime to choose from
