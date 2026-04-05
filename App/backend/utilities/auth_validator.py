@@ -1,9 +1,10 @@
 from fastapi import HTTPException, Header
 from typing import Any
-from database.supabase_client import supabase
+
+from database.supabase_client import get_supabase_client
 
 # helper function to help us to check auth
-def auth_validator(authorization: str = Header(...)):
+async def auth_validator(authorization: str = Header(...)):
     if not authorization:
         raise HTTPException(status_code=401, detail="Missing authorization header")
 
@@ -19,7 +20,8 @@ def auth_validator(authorization: str = Header(...)):
 
     # check for user
     try:
-        userData: Any = supabase.auth.get_user(token)
+        supabase = await get_supabase_client()
+        userData: Any = await supabase.auth.get_user(token)
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 

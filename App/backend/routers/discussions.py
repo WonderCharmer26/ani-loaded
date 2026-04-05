@@ -1,11 +1,15 @@
 import os
 import uuid
+from inspect import iscoroutinefunction
+
 from gotrue.types import User
 import httpx
 from dotenv import load_dotenv
 from fastapi import APIRouter, File, Form, Header, UploadFile
 from fastapi.exceptions import HTTPException
-from database.supabase_client import supabase
+from starlette.concurrency import run_in_threadpool
+
+from database.supabase_client import get_supabase_client
 from schemas.discussions import DiscussionsResponse
 from utilities.auth_validator import auth_validator
 from utilities.genreFunctions import ANILIST_URL
@@ -42,6 +46,12 @@ def normalize_optional_text(value: str | None) -> str | None:
     stripped = value.strip()
     # return
     return stripped or None
+
+
+async def _call_maybe_async(func, *args, **kwargs):
+    if iscoroutinefunction(func):
+        return await func(*args, **kwargs)
+    return await run_in_threadpool(func, *args, **kwargs)
 
 
 # TODO: refactor this into another file
@@ -91,8 +101,9 @@ async def get_discussions():
     This function returns all the discussions for the discussions page
     """
     try:
+        supabase = await get_supabase_client()
         # get all the discussions
-        response = supabase.table("discussions").select("*").execute()
+        response = await supabase.table("discussions").select("*").execute()
 
         # return data
         return {
@@ -111,8 +122,9 @@ async def get_discussion_by_id(discussion_id: str):
     This function returns a specific discussion by its ID
     """
     try:
+        supabase = await get_supabase_client()
         # Get the discussion by id from the database
-        response = (
+        response = await (
             supabase.table("discussions")
             .select("*")
             .eq("id", discussion_id)
@@ -146,8 +158,9 @@ async def get_discussion_comments(discussion_id: str):
     This function returns all comments for a specific discussion
     """
     try:
+        supabase = await get_supabase_client()
         # Get all comments for the discussion
-        response = (
+        response = await (
             supabase.table("discussions_comments")
             .select("*")
             .eq("discussion_id", discussion_id)
@@ -182,12 +195,13 @@ async def post_new_discussion(
     thumbnail: UploadFile | None = File(None),  # optional params
     episode_number: int | None = Form(None),  # optional params
     season_number: int | None = Form(None),  # optional params
-    authorization: str = Header(...) # required
+    authorization: str = Header(...),  # required
 ):
 
     # check if the request has an authorized user handles errors
-    user: User  = auth_validator(authorization)
-    
+    user: User = await auth_validator(authorization)
+    supabase = await get_supabase_client()
+
     # account for negative anime
     if anime_id <= 0:
         raise HTTPException(status_code=422, detail="anime_id must be a positive integer")
@@ -213,11 +227,10 @@ async def post_new_discussion(
 
     try:
         # insert in to anime table so we can store the anime if it's new
-        supabase.table("anime").upsert(anime_payload, on_conflict="id").execute()
+        await supabase.table("anime").upsert(anime_payload, on_conflict="id").execute()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Anime upsert failed: {e}")
 
-    
     # variables to hold the thumbnail info
     thumbnail_path = None
     thumbnail_public_url = None
@@ -236,7 +249,7 @@ async def post_new_discussion(
 
         # make the max bytes 5mb to help with storage (might make bigger)
         max_bytes = 5 * 1024 * 1024
-        
+
         # make sure the file size is not bigger than the allowed
         if len(file_bytes) > max_bytes:
             raise HTTPException(
@@ -259,9 +272,11 @@ async def post_new_discussion(
 
         try:
             # upload the thumbnail to the storage bucket
-            supabase.storage.from_(storage_key_discussion).upload(
-                path=thumbnail_path,  # custom file path
-                file=file_bytes,  # file bytes that get stored up
+            bucket = supabase.storage.from_(storage_key_discussion)
+            await _call_maybe_async(
+                bucket.upload,
+                path=thumbnail_path,
+                file=file_bytes,
                 file_options={"content-type": thumbnail.content_type, "upsert": False},
             )
         except Exception as e:
@@ -269,14 +284,15 @@ async def post_new_discussion(
 
         try:
             # try to get the public url to send to database to help link database to bucket
-            thumbnail_public_url = supabase.storage.from_(
-                storage_key_discussion
-            ).get_public_url(thumbnail_path)
+            bucket = supabase.storage.from_(storage_key_discussion)
+            thumbnail_public_url = await _call_maybe_async(
+                bucket.get_public_url, thumbnail_path
+            )
         except Exception:
             # if not store none seeing as there must be no thumbnail posted
             thumbnail_public_url = None
 
-    # Payload that i'll send to the discussions table 
+    # Payload that i'll send to the discussions table
     payload = {
         "anime_id": anime_id,
         "category_id": category_id,
@@ -294,13 +310,14 @@ async def post_new_discussion(
     # try to send the needed data to the database
     try:
         # add the data from the request to the database
-        res = supabase.table("discussions").insert(payload).execute()
+        res = await supabase.table("discussions").insert(payload).execute()
     except Exception as e:
         # if there is a path for the thumbnail
         if thumbnail_path:
             try:
                 # remove the file if it fails to add to the database
-                supabase.storage.from_(storage_key_discussion).remove([thumbnail_path])
+                bucket = supabase.storage.from_(storage_key_discussion)
+                await _call_maybe_async(bucket.remove, [thumbnail_path])
             except Exception:
                 # doesn't matter
                 pass

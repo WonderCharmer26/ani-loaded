@@ -3,8 +3,9 @@ from fastapi import APIRouter, Header
 from fastapi.exceptions import HTTPException
 from gotrue import Optional
 from gotrue.types import User
+from supabase import AsyncClient
 
-from database.supabase_client import supabase
+from database.supabase_client import get_supabase_client
 
 from routers.discussions import validate_anime_exists
 from schemas.lists import (
@@ -26,7 +27,6 @@ router = APIRouter()
 load_dotenv()
 
 # NOTE: For other devs, I chose to return a pydantic model for validation purposes, fastapi handles the conversion
-# TODO: MAKE SUPABASE AWAIT INSTEAD OF SYNCRANOUS
 
 
 # helper func - ima move it later on
@@ -65,7 +65,9 @@ async def attach_anime_to_list_entries(list_rows: list[dict]) -> list[dict]:
 
 
 # function gets owner_id from list row data and fetches username from db and packages it to add to return data
-def normalize_owner_username(list_rows: list[dict]) -> list[dict]:
+async def normalize_owner_username(
+    list_rows: list[dict], supabase: AsyncClient
+) -> list[dict]:
     owner_ids = {
         str(list_row["owner_id"])
         for list_row in list_rows
@@ -82,6 +84,7 @@ def normalize_owner_username(list_rows: list[dict]) -> list[dict]:
             .in_("user_id", list(owner_ids))
             .execute()
         )
+        profile_response = await profile_response
         for profile_row in profile_response.data or []:
             user_id = profile_row.get("user_id")
             if user_id is None:
@@ -106,8 +109,9 @@ def normalize_owner_username(list_rows: list[dict]) -> list[dict]:
 async def get_all_lists():
     # access the supabase table
     try:
+        supabase = await get_supabase_client()
         # get the users_list and the user_list_entry that are public
-        res = (
+        res = await (
             supabase.table("user_list")
             .select("*, user_list_entry(*)")
             .eq("visibility", "public")
@@ -117,7 +121,7 @@ async def get_all_lists():
         if not res.data:
             raise HTTPException(status_code=404, detail="No lists found")
 
-        rows_with_usernames = normalize_owner_username(res.data)
+        rows_with_usernames = await normalize_owner_username(res.data, supabase)
         hydrated = await attach_anime_to_list_entries(rows_with_usernames)
 
         # validate all the items in the list
@@ -141,11 +145,12 @@ async def get_specific_list(list_id: str, authorization: Optional[str] = Header(
     # check the user
 
     if authorization:
-        user = auth_validator(authorization)
+        user = await auth_validator(authorization)
 
     # try to make a req to get the specific list data and the entries
     try:
-        res = (
+        supabase = await get_supabase_client()
+        res = await (
             supabase.table("user_list")
             .select("*, user_list_entry(*)")
             .eq("id", list_id)
@@ -166,7 +171,7 @@ async def get_specific_list(list_id: str, authorization: Optional[str] = Header(
             raise HTTPException(status_code=403, detail="This list is private")
 
         # get the username
-        username_from_row = normalize_owner_username([row])[0]
+        username_from_row = (await normalize_owner_username([row], supabase))[0]
         # add the anime data from anilist
         hydrated_row = (await attach_anime_to_list_entries([username_from_row]))[0]
 
@@ -187,11 +192,12 @@ async def change_specific_list(
     list_id: str, payload: UserListUpdate, authorization: str = Header(...)
 ):
     # check the token (handles raising errors)
-    user: User = auth_validator(authorization)
+    user: User = await auth_validator(authorization)
 
     try:
+        supabase = await get_supabase_client()
         # make the update if the owner_id and list_id matches
-        (
+        await (
             supabase.rpc(
                 "update_list_and_entries",
                 {
@@ -216,10 +222,11 @@ async def change_specific_list(
 @router.delete("/list/{list_id}", response_model=UserListSuccessMessage)
 async def delete_specific_list(list_id: str, authorization: str = Header(...)):
     # authorize the user
-    user: User = auth_validator(authorization)
+    user: User = await auth_validator(authorization)
 
     try:
-        res = (
+        supabase = await get_supabase_client()
+        res = await (
             supabase.table("user_list")
             .delete()
             .eq("id", list_id)
@@ -264,7 +271,8 @@ async def create_list(
     authorization: str = Header(...),
 ):
     # check if the user is validated (handles raising error) (gets back user obj)
-    user: User = auth_validator(authorization)
+    user: User = await auth_validator(authorization)
+    supabase = await get_supabase_client()
 
     # store the entries to break down
     entries = payload.entries
@@ -289,7 +297,9 @@ async def create_list(
     # upsert anime rows first so the ids exist for foreign key checks
     try:
         if anime_payload:
-            supabase.table("anime").upsert(anime_payload, on_conflict="id").execute()
+            await supabase.table("anime").upsert(
+                anime_payload, on_conflict="id"
+            ).execute()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Anime upsert failed: {e}")
 
@@ -306,7 +316,7 @@ async def create_list(
     created_list = None
     # add the user list to db
     try:
-        list_response = supabase.table("user_list").insert(list_payload).execute()
+        list_response = await supabase.table("user_list").insert(list_payload).execute()
         if not list_response.data:
             raise HTTPException(status_code=500, detail="List insert failed")
         created_list = list_response.data[0]
@@ -329,14 +339,16 @@ async def create_list(
     try:
         # checks if the frontend actually returns entries to be added
         entry_response = (
-            supabase.table("user_list_entry").insert(entry_payload).execute()
+            await supabase.table("user_list_entry").insert(entry_payload).execute()
             if entry_payload
             else None
         )
     except Exception as e:
         try:
             # error handle
-            supabase.table("user_list").delete().eq("id", created_list["id"]).execute()
+            await supabase.table("user_list").delete().eq(
+                "id", created_list["id"]
+            ).execute()
         except Exception:
             pass
         raise HTTPException(status_code=500, detail=f"List entry insert failed: {e}")
@@ -350,7 +362,7 @@ async def create_list(
     }
 
     try:
-        profile_response = (
+        profile_response = await (
             supabase.table("profiles")
             .select("username")
             .eq("user_id", str(user.id))
