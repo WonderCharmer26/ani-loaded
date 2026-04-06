@@ -297,9 +297,11 @@ async def create_list(
     # upsert anime rows first so the ids exist for foreign key checks
     try:
         if anime_payload:
-            await supabase.table("anime").upsert(
-                anime_payload, on_conflict="id"
-            ).execute()
+            await (
+                supabase.table("anime")
+                .upsert(anime_payload, on_conflict="id")
+                .execute()
+            )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Anime upsert failed: {e}")
 
@@ -346,9 +348,12 @@ async def create_list(
     except Exception as e:
         try:
             # error handle
-            await supabase.table("user_list").delete().eq(
-                "id", created_list["id"]
-            ).execute()
+            await (
+                supabase.table("user_list")
+                .delete()
+                .eq("id", created_list["id"])
+                .execute()
+            )
         except Exception:
             pass
         raise HTTPException(status_code=500, detail=f"List entry insert failed: {e}")
