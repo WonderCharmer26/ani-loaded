@@ -49,7 +49,7 @@ describe("discussionService", () => {
     const result = await getAllDiscussions();
 
     expect(result).toEqual(data);
-    expect(axios.get).toHaveBeenCalledWith("https://api.test/discussions");
+    expect(axios.get).toHaveBeenCalledWith("https://api.test/discussions", { params: undefined });
   });
 
   it("returns single discussion from getDiscussionById", async () => {
@@ -76,7 +76,7 @@ describe("discussionService", () => {
     );
   });
 
-  it("throws validation error branch first when session retrieval fails", async () => {
+  it("throws sign-in error when session is null even if error is present", async () => {
     vi.mocked(supabase.auth.getSession).mockResolvedValueOnce({
       data: { session: null },
       error: "session failed",
@@ -100,10 +100,9 @@ describe("discussionService", () => {
         is_locked: false,
         is_spoiler: false,
       }),
-    ).rejects.toThrow("There was an error validating your session");
+    ).rejects.toThrow("Make sure you're signed in");
 
-    expect(toast.error).toHaveBeenCalledWith("There was an error: session failed");
-    expect(toast.info).not.toHaveBeenCalled();
+    expect(toast.info).toHaveBeenCalledWith("Please make sign in to make a post");
     expect(axios.post).not.toHaveBeenCalled();
   });
 
