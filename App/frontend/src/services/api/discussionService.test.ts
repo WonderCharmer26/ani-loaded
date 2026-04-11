@@ -76,7 +76,7 @@ describe("discussionService", () => {
     );
   });
 
-  it("throws sign-in error when session is null even if error is present", async () => {
+  it("throws validation error when session retrieval fails", async () => {
     vi.mocked(supabase.auth.getSession).mockResolvedValueOnce({
       data: { session: null },
       error: "session failed",
@@ -100,9 +100,9 @@ describe("discussionService", () => {
         is_locked: false,
         is_spoiler: false,
       }),
-    ).rejects.toThrow("Make sure you're signed in");
+    ).rejects.toThrow("There was an error validating your session");
 
-    expect(toast.info).toHaveBeenCalledWith("Please make sign in to make a post");
+    expect(toast.error).toHaveBeenCalledWith("There was an error: session failed");
     expect(axios.post).not.toHaveBeenCalled();
   });
 
