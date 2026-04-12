@@ -134,7 +134,7 @@ async def get_discussions(
             query = query.order("created_at", desc=True)
 
         # execute query
-        response = query.execute()
+        response = await query.execute()
 
         # return data
         return {
@@ -155,7 +155,7 @@ async def get_discussion_categories():
     try:
         supabase = await get_supabase_client()
         response = (
-            supabase.table("discussion_categories")
+            await supabase.table("discussion_categories")
             .select("*")
             .eq("is_active", True)
             .order("sort_order", desc=False)
@@ -389,12 +389,12 @@ async def get_upvote_status(discussion_id: str, authorization: str = Header(...)
     Returns whether the current user has upvoted a discussion.
     """
     user: User = await auth_validator(authorization)
-
+  
     try:
         supabase = await get_supabase_client()
-      
+        
         response = (
-            supabase.table("discussion_upvotes")
+            await supabase.table("discussion_upvotes")
             .select("*")
             .eq("discussion_id", discussion_id)
             .eq("user_id", str(user.id))
@@ -417,7 +417,7 @@ async def toggle_upvote(discussion_id: str, authorization: str = Header(...)):
     try:
         supabase = await get_supabase_client()
       
-        result = supabase.rpc(
+        result = await supabase.rpc(
             "toggle_discussion_upvote",
             {"p_discussion_id": discussion_id, "p_user_id": str(user.id)},
         ).execute()
@@ -461,7 +461,7 @@ async def post_comment(
         payload["parent_comment_id"] = comment.parent_comment_id
 
     try:
-        res = supabase.table("discussions_comments").insert(payload).execute()
+        res = await supabase.table("discussions_comments").insert(payload).execute()
     except Exception as e:
         print(f"[COMMENT INSERT ERROR] {e}")  # TODO: remove after debugging
         raise HTTPException(status_code=500, detail=f"Failed to insert comment: {e}")
@@ -469,14 +469,14 @@ async def post_comment(
     try:
         # increment comment count on the discussion
         discussion = (
-            supabase.table("discussions")
+            await supabase.table("discussions")
             .select("comment_count")
             .eq("id", discussion_id)
             .single()
             .execute()
         )
         new_count = (discussion.data.get("comment_count", 0)) + 1
-        supabase.table("discussions").update(
+        await supabase.table("discussions").update(
             {"comment_count": new_count}
         ).eq("id", discussion_id).execute()
     except Exception:
@@ -495,7 +495,7 @@ async def get_comment_upvote_status(comment_id: str, authorization: str = Header
     try:
         supabase = await get_supabase_client()
         response = (
-            supabase.table("comment_upvotes")
+            await supabase.table("comment_upvotes")
             .select("*")
             .eq("comment_id", comment_id)
             .eq("user_id", str(user.id))
@@ -514,7 +514,7 @@ async def toggle_comment_upvote(comment_id: str, authorization: str = Header(...
 
     try:
         supabase = await get_supabase_client()
-        result = supabase.rpc(
+        result = await supabase.rpc(
             "toggle_comment_upvote",
             {"p_comment_id": comment_id, "p_user_id": str(user.id)},
         ).execute()
@@ -537,7 +537,7 @@ async def update_discussion(
         supabase = await get_supabase_client()
         # check that this user owns the discussion
         discussion = (
-            supabase.table("discussions")
+            await supabase.table("discussions")
             .select("created_by")
             .eq("id", discussion_id)
             .single()
@@ -565,7 +565,7 @@ async def update_discussion(
             raise HTTPException(status_code=422, detail="No fields to update")
 
         res = (
-            supabase.table("discussions")
+            await supabase.table("discussions")
             .update(payload)
             .eq("id", discussion_id)
             .execute()
@@ -591,7 +591,7 @@ async def delete_discussion(
         supabase = await get_supabase_client()
         # check that this user owns the discussion
         discussion = (
-            supabase.table("discussions")
+            await supabase.table("discussions")
             .select("created_by, thumbnail_path")
             .eq("id", discussion_id)
             .single()
@@ -605,17 +605,17 @@ async def delete_discussion(
             raise HTTPException(status_code=403, detail="You can only delete your own discussions")
 
         # delete comments first
-        supabase.table("discussions_comments").delete().eq(
+        await supabase.table("discussions_comments").delete().eq(
             "discussion_id", discussion_id
         ).execute()
 
         # delete upvotes
-        supabase.table("discussion_upvotes").delete().eq(
+        await supabase.table("discussion_upvotes").delete().eq(
             "discussion_id", discussion_id
         ).execute()
 
         # delete the discussion
-        supabase.table("discussions").delete().eq("id", discussion_id).execute()
+        await supabase.table("discussions").delete().eq("id", discussion_id).execute()
 
         # clean up thumbnail from storage if exists
         thumbnail_path = discussion.data.get("thumbnail_path")
