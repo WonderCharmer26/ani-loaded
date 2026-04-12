@@ -388,7 +388,7 @@ async def get_upvote_status(discussion_id: str, authorization: str = Header(...)
     """
     Returns whether the current user has upvoted a discussion.
     """
-    user: User = auth_validator(authorization)
+    user: User = await auth_validator(authorization)
 
     try:
         supabase = await get_supabase_client()
@@ -412,7 +412,7 @@ async def toggle_upvote(discussion_id: str, authorization: str = Header(...)):
     Toggles an upvote on a discussion for the current user.
     Returns the new upvote state and updated count.
     """
-    user: User = auth_validator(authorization)
+    user: User = await auth_validator(authorization)
 
     try:
         supabase = await get_supabase_client()
@@ -434,7 +434,7 @@ async def post_comment(
     authorization: str = Header(...),
 ):
     """Submit a comment on a discussion"""
-    user: User = auth_validator(authorization)
+    user: User = await auth_validator(authorization)
     supabase = await get_supabase_client()
 
     # validate body is not empty
@@ -490,7 +490,7 @@ async def post_comment(
 @router.get("/comments/{comment_id}/upvote")
 async def get_comment_upvote_status(comment_id: str, authorization: str = Header(...)):
     """Returns whether the current user has upvoted a comment."""
-    user: User = auth_validator(authorization)
+    user: User = await auth_validator(authorization)
 
     try:
         supabase = await get_supabase_client()
@@ -510,7 +510,7 @@ async def get_comment_upvote_status(comment_id: str, authorization: str = Header
 @router.post("/comments/{comment_id}/upvote")
 async def toggle_comment_upvote(comment_id: str, authorization: str = Header(...)):
     """Toggles an upvote on a comment for the current user."""
-    user: User = auth_validator(authorization)
+    user: User = await auth_validator(authorization)
 
     try:
         supabase = await get_supabase_client()
@@ -531,7 +531,7 @@ async def update_discussion(
     authorization: str = Header(...),
 ):
     """Update a discussion (only by author)"""
-    user: User = auth_validator(authorization)
+    user: User = await auth_validator(authorization)
 
     try:
         supabase = await get_supabase_client()
@@ -585,7 +585,7 @@ async def delete_discussion(
     authorization: str = Header(...),
 ):
     """Delete a discussion (only by author)"""
-    user: User = auth_validator(authorization)
+    user: User = await auth_validator(authorization)
 
     try:
         supabase = await get_supabase_client()
