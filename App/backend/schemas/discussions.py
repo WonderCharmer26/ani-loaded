@@ -45,6 +45,7 @@ class DiscussionComments(BaseModel):
     id: UUID
     discussion_id: UUID
     created_by: str
+    created_by_username: Optional[str]
     parent_comment_id: UUID
     body: str
     is_spoiler: bool
@@ -66,3 +67,18 @@ class DiscussionCategories(BaseModel):
 class DiscussionsResponse(BaseModel):
     data: list[Discussions]
     total: Optional[int]
+
+
+# Request model for submitting a comment
+class CommentRequest(BaseModel):
+    body: str
+    is_spoiler: bool = False
+    parent_comment_id: Optional[str] = None
+
+
+# Request model for updating a discussion
+class DiscussionUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    body: Optional[str] = None
+    is_spoiler: Optional[bool] = None
+    is_locked: Optional[bool] = None

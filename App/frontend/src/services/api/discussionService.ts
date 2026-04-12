@@ -3,6 +3,7 @@ import {
   Discussion,
   DiscussionsResponse,
   DiscussionsComments,
+  DiscussionsCategories,
   DiscussionRequest,
   DiscussionResponse,
 } from "../../schemas/discussion";
@@ -10,10 +11,28 @@ import { backendUrl } from "./fetchAnimes";
 import { supabase } from "../supabase/supabaseConnection";
 import { toast } from "sonner";
 
-// funtion gets all discussions
-export async function getAllDiscussions(): Promise<Discussion[]> {
-  const res = await axios.get<DiscussionsResponse>(`${backendUrl}/discussions`);
-  return res.data.data;
+// query params for fetching discussions
+export interface DiscussionQueryParams {
+  search?: string;
+  category_id?: string;
+  anime_id?: number;
+  sort?: "newest" | "oldest" | "most_upvoted" | "most_commented";
+}
+
+// funtion gets all discussions with optional search, filter, sort
+export async function getAllDiscussions(
+  params?: DiscussionQueryParams,
+): Promise<Discussion[]> {
+  const res = await axios.get<DiscussionsResponse | Discussion[]>(
+    `${backendUrl}/discussions`,
+    { params },
+  );
+
+  if (Array.isArray(res.data)) {
+    return res.data;
+  }
+
+  return res.data.data ?? [];
 }
 
 // function to get the specific discussions
@@ -113,4 +132,154 @@ export async function submitDiscussion({
   }
   // return the data
   return res.data;
+}
+
+// function to get the upvote status for a discussion for the current user
+export async function getUpvoteStatus(
+  discussionId: string,
+): Promise<{ upvoted: boolean }> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+
+  if (!token) return { upvoted: false };
+
+  const res = await axios.get<{ upvoted: boolean }>(
+    `${backendUrl}/discussions/${discussionId}/upvote`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  return res.data;
+}
+
+// function to toggle an upvote on a discussion
+export async function toggleUpvote(
+  discussionId: string,
+): Promise<{ upvoted: boolean; upvote_count: number }> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+
+  if (!token) {
+    toast.info("Please sign in to upvote");
+    throw new Error("Not signed in");
+  }
+
+  const res = await axios.post<{ upvoted: boolean; upvote_count: number }>(
+    `${backendUrl}/discussions/${discussionId}/upvote`,
+    {},
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  return res.data;
+}
+
+// function to submit a comment on a discussion
+export async function submitComment(
+  discussionId: string,
+  body: string,
+  isSpoiler: boolean = false,
+  parentCommentId?: string,
+): Promise<DiscussionsComments> {
+  const { data: sessionData, error } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+
+  if (!token) {
+    toast.info("Please sign in to comment");
+    throw new Error("Not signed in");
+  }
+
+  if (error) {
+    toast.error(`There was an error: ${error}`);
+    throw new Error("Error validating session");
+  }
+
+  const res = await axios.post<{ comment: DiscussionsComments }>(
+    `${backendUrl}/discussions/${discussionId}/comments`,
+    {
+      body,
+      is_spoiler: isSpoiler,
+      parent_comment_id: parentCommentId ?? null,
+    },
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  return res.data.comment;
+}
+
+// function to update a discussion
+export async function updateDiscussion(
+  discussionId: string,
+  updates: { title?: string; body?: string; is_spoiler?: boolean; is_locked?: boolean },
+): Promise<Discussion> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+
+  if (!token) {
+    toast.info("Please sign in to edit");
+    throw new Error("Not signed in");
+  }
+
+  const res = await axios.patch<{ discussion: Discussion }>(
+    `${backendUrl}/discussions/${discussionId}`,
+    updates,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  return res.data.discussion;
+}
+
+// function to delete a discussion
+export async function deleteDiscussion(
+  discussionId: string,
+): Promise<void> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+
+  if (!token) {
+    toast.info("Please sign in to delete");
+    throw new Error("Not signed in");
+  }
+
+  await axios.delete(`${backendUrl}/discussions/${discussionId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+// function to get comment upvote status
+export async function getCommentUpvoteStatus(
+  commentId: string,
+): Promise<{ upvoted: boolean }> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+
+  if (!token) return { upvoted: false };
+
+  const res = await axios.get<{ upvoted: boolean }>(
+    `${backendUrl}/comments/${commentId}/upvote`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  return res.data;
+}
+
+// function to toggle comment upvote
+export async function toggleCommentUpvote(
+  commentId: string,
+): Promise<{ upvoted: boolean; upvote_count: number }> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+
+  if (!token) {
+    toast.info("Please sign in to upvote");
+    throw new Error("Not signed in");
+  }
+
+  const res = await axios.post<{ upvoted: boolean; upvote_count: number }>(
+    `${backendUrl}/comments/${commentId}/upvote`,
+    {},
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  return res.data;
+}
+
+// function to get discussion categories
+export async function getDiscussionCategories(): Promise<DiscussionsCategories[]> {
+  const res = await axios.get<{ data: DiscussionsCategories[] }>(
+    `${backendUrl}/discussions/categories`,
+  );
+  return res.data.data;
 }
