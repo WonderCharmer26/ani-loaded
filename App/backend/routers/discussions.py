@@ -11,7 +11,6 @@ from starlette.concurrency import run_in_threadpool
 
 from database.supabase_client import get_supabase_client
 from schemas.discussions import DiscussionsResponse
-from database.supabase_client import supabase
 from schemas.discussions import CommentRequest, DiscussionUpdateRequest, DiscussionsResponse
 from utilities.auth_validator import auth_validator
 from utilities.genreFunctions import ANILIST_URL
