@@ -1,3 +1,5 @@
+import os
+
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,13 +14,13 @@ load_dotenv()
 # create the app object
 app = FastAPI()
 
+# CORS origins: read from CORS_ORIGINS env var (comma-separated) or default to localhost
+cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
+
 # add CORS middleware to allow cross-origin requests
 app.add_middleware(
     CORSMiddleware,  # this is the middleware
-    allow_origins=[
-        "http://localhost:5173"
-        # "*"
-    ],  # allow all origins (change to site url later on in prod)
+    allow_origins=cors_origins,
     allow_credentials=False,  # allow credentials
     allow_methods=["*"],  # means allow all methods
     allow_headers=["*"],  # allow all headers
