@@ -48,11 +48,14 @@ export interface DiscussionsComments {
   id: string;
   discussion_id: string;
   created_by: string;
+  created_by_username?: string;
+  created_by_avatar_url?: string;
   parent_comment_id: string;
   body: string;
   is_spoiler: boolean;
   created_at: string;
   updated_at: string;
+  upvote_count: number;
 }
 
 export interface DiscussionsCategories {

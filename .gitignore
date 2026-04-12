@@ -1,17 +1,18 @@
-# Virtual Environment for Python 
+# Virtual Environment for Python
 **/venv/
 **/env/
 **/ENV/
 **/.venv/
 **/.env/
 
-# Frontend Dependencies 
+# Frontend Dependencies
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .npm
 .yarn/
+
 # Build files
 /build
 /dist
@@ -26,8 +27,7 @@ __pycache__/
 .Python
 *.so
 
-# Python Distribution / Packaging (not taking any chances)
-.Python
+# Python Distribution / Packaging
 build/
 develop-eggs/
 dist/
@@ -45,7 +45,7 @@ wheels/
 *.egg
 MANIFEST
 
-# Environment Variables (anywhere in project to make sure that we don't leak anything)
+# Environment Variables (anywhere in project)
 .env
 .env.local
 .env.development.local
@@ -53,20 +53,36 @@ MANIFEST
 .env.production.local
 **/.env
 
-# Fastapi junk I dont want committed
-*.log
-.env
-__pycache__/
+# MCP config (contains secrets)
+.mcp.json
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
 
 # IDE
 .vscode/
 .qodo/
-.vscode/settings.json
 *.swp
 *.swo
 *~
+
+# OS
 .DS_Store
 Thumbs.db
+
+# Logs
+*.log
 
 # Database
 *.db
