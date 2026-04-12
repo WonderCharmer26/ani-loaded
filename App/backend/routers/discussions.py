@@ -107,6 +107,7 @@ async def get_discussions(
     This function returns all the discussions for the discussions page
     """
     try:
+        supabase = await get_supabase_client()
         # start query
         query = supabase.table("discussions").select("*")
 
