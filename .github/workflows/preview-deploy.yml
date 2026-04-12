@@ -1,0 +1,191 @@
+name: Preview Deploy
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  TF_WORKING_DIR: infra/envs/preview
+
+jobs:
+  deploy:
+    name: Deploy Preview
+    runs-on: ubuntu-latest
+    outputs:
+      frontend_url: ${{ steps.urls.outputs.frontend_url }}
+      backend_url: ${{ steps.urls.outputs.backend_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -backend-config="region=${{ env.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ secrets.TF_LOCK_TABLE }}"
+
+      - name: Terraform Apply
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          terraform apply -auto-approve \
+            -var="supabase_url=${{ secrets.SUPABASE_URL }}" \
+            -var="supabase_key=${{ secrets.SUPABASE_KEY }}" \
+            -var="storage_key_discussion=${{ secrets.STORAGE_KEY_DISCUSSION }}"
+
+      - name: Get Terraform Outputs
+        id: tf
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          echo "ecr_url=$(terraform output -raw ecr_repository_url)" >> "$GITHUB_OUTPUT"
+          echo "s3_bucket=$(terraform output -raw frontend_s3_bucket)" >> "$GITHUB_OUTPUT"
+          echo "cf_id=$(terraform output -raw cloudfront_distribution_id)" >> "$GITHUB_OUTPUT"
+          echo "cf_domain=$(terraform output -raw cloudfront_domain_name)" >> "$GITHUB_OUTPUT"
+          echo "alb_dns=$(terraform output -raw alb_dns_name)" >> "$GITHUB_OUTPUT"
+          echo "ecs_cluster=$(terraform output -raw ecs_cluster_name)" >> "$GITHUB_OUTPUT"
+          echo "ecs_service=$(terraform output -raw ecs_service_name)" >> "$GITHUB_OUTPUT"
+
+      # --- Backend: build, push, deploy ---
+
+      - name: Login to ECR
+        run: |
+          REGISTRY="${{ steps.tf.outputs.ecr_url }}"
+          REGISTRY="${REGISTRY%%/*}"
+          aws ecr get-login-password --region "$AWS_REGION" | \
+            docker login --username AWS --password-stdin "$REGISTRY"
+
+      - name: Build and push backend image
+        working-directory: App/backend
+        run: |
+          docker build -t "${{ steps.tf.outputs.ecr_url }}:latest" .
+          docker push "${{ steps.tf.outputs.ecr_url }}:latest"
+
+      - name: Force new ECS deployment
+        run: |
+          aws ecs update-service \
+            --cluster "${{ steps.tf.outputs.ecs_cluster }}" \
+            --service "${{ steps.tf.outputs.ecs_service }}" \
+            --force-new-deployment \
+            --region "$AWS_REGION"
+
+      - name: Wait for ECS service stability
+        run: |
+          aws ecs wait services-stable \
+            --cluster "${{ steps.tf.outputs.ecs_cluster }}" \
+            --services "${{ steps.tf.outputs.ecs_service }}" \
+            --region "$AWS_REGION"
+
+      # --- Frontend: build and deploy to S3 ---
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: App/frontend/package-lock.json
+
+      - name: Build frontend
+        working-directory: App/frontend
+        env:
+          VITE_BACKEND_URL: "http://${{ steps.tf.outputs.alb_dns }}"
+          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          VITE_SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          VITE_SUPABASE_BUCKET: ${{ secrets.SUPABASE_BUCKET }}
+          VITE_SUPABASE_FOLDER: ${{ secrets.SUPABASE_FOLDER }}
+          VITE_SUPABASE_FOLDER2: ${{ secrets.SUPABASE_FOLDER2 }}
+        run: |
+          npm ci
+          npm run build
+
+      - name: Deploy frontend to S3
+        run: |
+          aws s3 sync App/frontend/dist/ "s3://${{ steps.tf.outputs.s3_bucket }}/" --delete
+
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ steps.tf.outputs.cf_id }}" \
+            --paths "/*"
+
+      # --- Output URLs ---
+
+      - name: Set output URLs
+        id: urls
+        run: |
+          echo "frontend_url=https://${{ steps.tf.outputs.cf_domain }}" >> "$GITHUB_OUTPUT"
+          echo "backend_url=http://${{ steps.tf.outputs.alb_dns }}" >> "$GITHUB_OUTPUT"
+
+      - name: Summary
+        run: |
+          echo "## Preview Environment Deployed" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Service  | URL |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|----------|-----|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Frontend | https://${{ steps.tf.outputs.cf_domain }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Backend  | http://${{ steps.tf.outputs.alb_dns }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "> Approve the **Destroy Preview** job when you are done testing." >> "$GITHUB_STEP_SUMMARY"
+
+  destroy:
+    name: Destroy Preview
+    needs: deploy
+    runs-on: ubuntu-latest
+    environment: preview-destroy
+    steps:
+      - name: Preview URLs (review before destroying)
+        run: |
+          echo "Frontend: ${{ needs.deploy.outputs.frontend_url }}"
+          echo "Backend:  ${{ needs.deploy.outputs.backend_url }}"
+          echo ""
+          echo "This job was approved — destroying the preview environment now."
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -backend-config="region=${{ env.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ secrets.TF_LOCK_TABLE }}"
+
+      - name: Terraform Destroy
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          terraform destroy -auto-approve \
+            -var="supabase_url=${{ secrets.SUPABASE_URL }}" \
+            -var="supabase_key=${{ secrets.SUPABASE_KEY }}" \
+            -var="storage_key_discussion=${{ secrets.STORAGE_KEY_DISCUSSION }}"
+
+      - name: Summary
+        run: |
+          echo "## Preview Environment Destroyed" >> "$GITHUB_STEP_SUMMARY"
+          echo "All preview resources have been torn down." >> "$GITHUB_STEP_SUMMARY"
