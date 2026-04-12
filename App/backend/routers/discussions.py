@@ -153,6 +153,7 @@ async def get_discussions(
 async def get_discussion_categories():
     """Get all active discussion categories"""
     try:
+        supabase = await get_supabase_client()
         response = (
             supabase.table("discussion_categories")
             .select("*")
@@ -390,6 +391,8 @@ async def get_upvote_status(discussion_id: str, authorization: str = Header(...)
     user: User = auth_validator(authorization)
 
     try:
+        supabase = await get_supabase_client()
+      
         response = (
             supabase.table("discussion_upvotes")
             .select("*")
@@ -412,6 +415,8 @@ async def toggle_upvote(discussion_id: str, authorization: str = Header(...)):
     user: User = auth_validator(authorization)
 
     try:
+        supabase = await get_supabase_client()
+      
         result = supabase.rpc(
             "toggle_discussion_upvote",
             {"p_discussion_id": discussion_id, "p_user_id": str(user.id)},
@@ -430,6 +435,7 @@ async def post_comment(
 ):
     """Submit a comment on a discussion"""
     user: User = auth_validator(authorization)
+    supabase = await get_supabase_client()
 
     # validate body is not empty
     body = comment.body.strip()
@@ -487,6 +493,7 @@ async def get_comment_upvote_status(comment_id: str, authorization: str = Header
     user: User = auth_validator(authorization)
 
     try:
+        supabase = await get_supabase_client()
         response = (
             supabase.table("comment_upvotes")
             .select("*")
@@ -506,6 +513,7 @@ async def toggle_comment_upvote(comment_id: str, authorization: str = Header(...
     user: User = auth_validator(authorization)
 
     try:
+        supabase = await get_supabase_client()
         result = supabase.rpc(
             "toggle_comment_upvote",
             {"p_comment_id": comment_id, "p_user_id": str(user.id)},
@@ -526,6 +534,7 @@ async def update_discussion(
     user: User = auth_validator(authorization)
 
     try:
+        supabase = await get_supabase_client()
         # check that this user owns the discussion
         discussion = (
             supabase.table("discussions")
@@ -579,6 +588,7 @@ async def delete_discussion(
     user: User = auth_validator(authorization)
 
     try:
+        supabase = await get_supabase_client()
         # check that this user owns the discussion
         discussion = (
             supabase.table("discussions")
