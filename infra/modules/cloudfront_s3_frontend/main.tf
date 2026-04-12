@@ -21,6 +21,23 @@ resource "aws_cloudfront_origin_access_control" "frontend" {
   signing_protocol                  = "sigv4"
 }
 
+# CloudFront Function to strip /api prefix before forwarding to ALB
+resource "aws_cloudfront_function" "strip_api_prefix" {
+  count = var.alb_dns_name != "" ? 1 : 0
+
+  name    = "${var.project_name}-${var.environment}-strip-api"
+  runtime = "cloudfront-js-2.0"
+  publish = true
+
+  code = <<-EOF
+    function handler(event) {
+      var request = event.request;
+      request.uri = request.uri.replace(/^\/api/, '') || '/';
+      return request;
+    }
+  EOF
+}
+
 resource "aws_cloudfront_distribution" "frontend" {
   enabled             = true
   default_root_object = "index.html"
@@ -30,6 +47,22 @@ resource "aws_cloudfront_distribution" "frontend" {
     domain_name              = aws_s3_bucket.frontend.bucket_regional_domain_name
     origin_id                = "s3-frontend"
     origin_access_control_id = aws_cloudfront_origin_access_control.frontend.id
+  }
+
+  # ALB origin for /api/* reverse proxy
+  dynamic "origin" {
+    for_each = var.alb_dns_name != "" ? [1] : []
+    content {
+      domain_name = var.alb_dns_name
+      origin_id   = "alb-backend"
+
+      custom_origin_config {
+        http_port              = 80
+        https_port             = 443
+        origin_protocol_policy = "http-only"
+        origin_ssl_protocols   = ["TLSv1.2"]
+      }
+    }
   }
 
   default_cache_behavior {
@@ -46,6 +79,33 @@ resource "aws_cloudfront_distribution" "frontend" {
     min_ttl                = 0
     default_ttl            = 3600
     max_ttl                = 86400
+  }
+
+  # /api/* → forward to ALB (no caching, all methods)
+  dynamic "ordered_cache_behavior" {
+    for_each = var.alb_dns_name != "" ? [1] : []
+    content {
+      path_pattern     = "/api/*"
+      allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+      cached_methods   = ["GET", "HEAD"]
+      target_origin_id = "alb-backend"
+
+      forwarded_values {
+        query_string = true
+        headers      = ["Authorization", "Origin", "Accept", "Content-Type"]
+        cookies { forward = "all" }
+      }
+
+      viewer_protocol_policy = "redirect-to-https"
+      min_ttl                = 0
+      default_ttl            = 0
+      max_ttl                = 0
+
+      function_association {
+        event_type   = "viewer-request"
+        function_arn = aws_cloudfront_function.strip_api_prefix[0].arn
+      }
+    }
   }
 
   # SPA routing: serve index.html for paths that don't match a file

@@ -32,11 +32,12 @@ module "alb" {
   public_subnet_ids = module.network.public_subnet_ids
 }
 
-# --- Frontend (S3 + CloudFront) ---
+# --- Frontend (S3 + CloudFront) with API reverse proxy ---
 module "cloudfront_s3_frontend" {
   source       = "../../modules/cloudfront_s3_frontend"
   project_name = var.project_name
   environment  = var.environment
+  alb_dns_name = module.alb.dns_name
 }
 
 # --- Backend Compute (ECS Fargate) ---

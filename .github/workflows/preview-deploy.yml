@@ -103,7 +103,7 @@ jobs:
       - name: Build frontend
         working-directory: App/frontend
         env:
-          VITE_BACKEND_URL: "http://${{ steps.tf.outputs.alb_dns }}"
+          VITE_BACKEND_URL: "https://${{ steps.tf.outputs.cf_domain }}/api"
           VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           VITE_SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           VITE_SUPABASE_BUCKET: ${{ secrets.SUPABASE_BUCKET }}
@@ -129,7 +129,7 @@ jobs:
         id: urls
         run: |
           echo "frontend_url=https://${{ steps.tf.outputs.cf_domain }}" >> "$GITHUB_OUTPUT"
-          echo "backend_url=http://${{ steps.tf.outputs.alb_dns }}" >> "$GITHUB_OUTPUT"
+          echo "backend_url=https://${{ steps.tf.outputs.cf_domain }}/api" >> "$GITHUB_OUTPUT"
 
       - name: Summary
         run: |
@@ -138,7 +138,7 @@ jobs:
           echo "| Service  | URL |" >> "$GITHUB_STEP_SUMMARY"
           echo "|----------|-----|" >> "$GITHUB_STEP_SUMMARY"
           echo "| Frontend | https://${{ steps.tf.outputs.cf_domain }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Backend  | http://${{ steps.tf.outputs.alb_dns }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Backend  | https://${{ steps.tf.outputs.cf_domain }}/api |" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "> Approve the **Destroy Preview** job when you are done testing." >> "$GITHUB_STEP_SUMMARY"
 
