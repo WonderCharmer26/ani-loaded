@@ -9,7 +9,6 @@ variable "environment" {
 }
 
 variable "alb_dns_name" {
-  description = "DNS name of the ALB to proxy /api/* requests to. Leave empty to disable."
+  description = "DNS name of the ALB to proxy /api/* requests to."
   type        = string
-  default     = ""
 }
