@@ -23,6 +23,7 @@ ANILIST_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 
 # TODO: MOVE THESE FUNCTIONS TO SEPERATE PY FILE TO HELP KEEP STRUCTURE CLEAN
 
+
 # helper function to help keep raising status_code errors cleaner
 def _raise_anilist_service_error(status_code: int, detail: str) -> None:
     raise HTTPException(status_code=status_code, detail=detail)
@@ -44,10 +45,15 @@ def _has_forbidden_graphql_error(data: dict) -> bool:
         if isinstance(extensions, dict):
             code = str(extensions.get("code", "")).lower()
 
-        if "forbidden" in message or "unauthorized" in message or code in {
-            "forbidden",
-            "unauthorized",
-        }:
+        if (
+            "forbidden" in message
+            or "unauthorized" in message
+            or code
+            in {
+                "forbidden",
+                "unauthorized",
+            }
+        ):
             return True
 
     return False
@@ -123,8 +129,7 @@ async def _post_to_anilist(
     return data
 
 
-# function to build a cache key
-# NOTE: probably replace with redis
+# NOTE: might replace custom built caching with redis
 def build_cache_key(prefix: str, **parts: object) -> str:
     ordered_parts = [f"{key}={parts[key]}" for key in sorted(parts)]
     if not ordered_parts:
