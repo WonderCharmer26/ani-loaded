@@ -5,6 +5,7 @@ from routers.lists import router as list_router
 from routers.anime import router as anime_router
 from routers.discussions import router as discussions_router
 from routers.health import router as health_router
+from routers.recommendations import router as recommendations_router
 
 # load in env
 load_dotenv()
@@ -29,3 +30,4 @@ app.include_router(health_router)  # app health
 app.include_router(anime_router)  # all the anime routes that call anilist
 app.include_router(discussions_router)  # routes for the anime
 app.include_router(list_router)
+app.include_router(recommendations_router)  # recommendation agent routes
