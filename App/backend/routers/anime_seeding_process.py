@@ -1,17 +1,18 @@
-# backend/scripts/seed_anime_embeddings.py
 import asyncio
 import httpx
 import os
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
-from supabase import acreate_client
+
+# from supabase import acreate_client
+
+from database.supabase_client import get_supabase_client
 
 load_dotenv()
 
 ANILIST_URL = "https://graphql.anilist.co"
 
-# This is the query you'll paginate through. Note we fetch description
-# because that's the richest text for building a good embedding.
+# example query that will be used in func later
 SEED_QUERY = """
 query ($page: Int, $perPage: Int) {
   Page(page: $page, perPage: $perPage) {
@@ -35,12 +36,8 @@ query ($page: Int, $perPage: Int) {
 """
 
 
+# creat the embedding string taking the dict of the anime and form the embedding function
 def build_embedding_text(anime: dict) -> str:
-    """
-    This is important — the quality of your vector search depends on
-    how you represent each anime as text. You want to pack in the
-    most semantically meaningful fields.
-    """
     title = anime["title"].get("english") or anime["title"].get("romaji", "")
     genres = ", ".join(anime.get("genres") or [])
     description = anime.get("description") or ""
@@ -50,17 +47,25 @@ def build_embedding_text(anime: dict) -> str:
     return f"Title: {title}. Genres: {genres}. Status: {status}. Season: {season}. {description}"
 
 
+# make the request to the animelist api and add the data to the database
 async def seed():
+    # openai client to make help with starting the connection to openai
     openai = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
-    supabase = await acreate_client(
-        os.environ["SUPABASE_URL"],
-        os.environ["SUPABASE_SERVICE_KEY"],  # use service key for seeding, not anon key
-    )
 
-    page = 1
+    # supabase = await acreate_client(
+    #     os.environ["SUPABASE_URL"],
+    #     os.environ["SUPABASE_SERVICE_KEY"],  # use service key for seeding, not anon key
+    # )
+
+    # async client for supabase
+    supabase = get_supabase_client()
+
+    page = 1  # starting page
     has_next = True
 
+    # open the connection and continue the embedding as long as theres more in the pagination
     while has_next:
+        # make a request to the anilist api for the rest of the anime
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 ANILIST_URL,
