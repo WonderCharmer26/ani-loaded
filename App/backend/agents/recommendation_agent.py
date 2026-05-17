@@ -1,22 +1,23 @@
 from langchain_openai import ChatOpenAI
-from langchain.agents import create_react_agent
+from langchain.agents import create_agent
 
 # tools that I made for searching for needed info
 from agents.tools import search_similar_anime, get_user_watched_list
 
-# NOTE: MIGHT EDIT THE TEMP TO MAKE IT MORE CREATIVE
-_llm = ChatOpenAI(model="gpt-4o", temperature=0)
+# agent will get the most logical response from using tooling
+_llm = ChatOpenAI(
+    model="gpt-4o", temperature=0
+)  # might tweak the temp in for a better creativity on the response from the agent
 
-# ill, add new tools to the array later on
+# gonna add more tooling later on
 _tools = [search_similar_anime, get_user_watched_list]
 
-# create_react_agent builds the LangGraph state machine that runs the agent loop:
+# create_agent builds the LangGraph state machine that runs the agent loop:
 #   reason → call tool → observe result → reason again → ... → final answer
-# This replaces the manual while True loop we described earlier.
-_agent = create_react_agent(model=_llm, tools=_tools)
+# handles all the looping so we don't have to do it manually.
+_agent = create_agent(model=_llm, tools=_tools)
 
-# The system prompt shapes how the agent thinks and what it prioritizes.
-# {user_id} is a placeholder we fill in at runtime for each request.
+# might add in the users username instead
 _SYSTEM_PROMPT = """
 You are an anime recommendation assistant for AniLoaded.
 
@@ -37,11 +38,14 @@ Be concise and helpful. Do not recommend anime the user has already seen.
 """
 
 
+# gonna make the users name instead
 async def run_recommendation_agent(user_id: str, user_message: str) -> str:
     """
     Takes the user's ID and their message, runs the full agent loop,
     and returns the final text response.
     """
+
+    # add in a fuction to get the users username from the database and then add it in the system prompt
 
     result = await _agent.ainvoke(
         {

@@ -5,7 +5,6 @@ from langchain_community.vectorstores import SupabaseVectorStore
 from database.supabase_client import get_supabase_client
 
 # Initialize embeddings once at module level.
-# OpenAIEmbeddings is a stateless config object — no network calls happen here.
 # It only makes a call when you actually pass text into it.
 _embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
 
@@ -20,24 +19,18 @@ async def search_similar_anime(query: str, match_count: int = 10) -> list[dict]:
 
     supabase = await get_supabase_client()
 
-    # SupabaseVectorStore wraps our match_anime RPC function.
-    # Under the hood it:
-    #   1. Embeds the query string using _embeddings (same model used during seeding)
-    #   2. Calls our match_anime() SQL function via supabase.rpc()
-    #   3. Returns Document objects where:
-    #       - doc.page_content = the "content" column (description aliased in match_anime)
-    #       - doc.metadata     = all other columns (id, title, genres, etc.)
+    # SupabaseVectorStore wraps our match_anime RPC function
     vector_store = SupabaseVectorStore(
         client=supabase,
         embedding=_embeddings,
         table_name="anime_embeddings",
-        query_name="match_anime",  # must match the SQL function name exactly
+        query_name="match_anime",  # must match the SQL function name exactly, update if the name changes
     )
 
     results = await vector_store.asimilarity_search(query, k=match_count)
 
-    # Convert Document objects into plain dicts the agent can read and reason over.
-    # We truncate description to 300 chars so we don't bloat the agent's context window.
+    # Convert Document objects into plain dicts the agent can read and reason over
+    # We truncate description to 300 chars because we don't want to bloat the agent's context window
     return [
         {
             "title": doc.metadata.get("title"),

@@ -5,6 +5,7 @@ import os
 openai = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 
+# get the users query for embedding, and match_count for amount to match default 10
 async def search_similar_anime(query: str, match_count: int = 10) -> list[dict]:
 
     # create the embedding w/ the query
