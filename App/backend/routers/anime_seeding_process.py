@@ -58,7 +58,7 @@ async def seed():
     # )
 
     # async client for supabase
-    supabase = get_supabase_client()
+    supabase = await get_supabase_client()
 
     page = 1  # starting page
     has_next = True
@@ -78,7 +78,7 @@ async def seed():
         has_next = page_data["pageInfo"]["hasNextPage"]
 
         # Build all the embedding texts for this batch
-        texts = [build_embedding_text(a) for a in anime_list]
+        texts = [build_embedding_text(anime) for anime in anime_list]
 
         # Get embeddings for the whole batch in one API call (much more efficient)
         embedding_response = await openai.embeddings.create(
