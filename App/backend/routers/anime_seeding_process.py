@@ -4,12 +4,13 @@ import os
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 
-# from supabase import acreate_client
+from supabase import acreate_client
 
-from database.supabase_client import get_supabase_client
+# from database.supabase_client import get_supabase_client
 
 load_dotenv()
 
+# anilist url
 ANILIST_URL = "https://graphql.anilist.co"
 
 # example query that will be used in func later
@@ -52,13 +53,14 @@ async def seed():
     # openai client to make help with starting the connection to openai
     openai = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
-    # supabase = await acreate_client(
-    #     os.environ["SUPABASE_URL"],
-    #     os.environ["SUPABASE_SERVICE_KEY"],  # use service key for seeding, not anon key
-    # )
+    # used anon key to bypass the RLS
+    supabase = await acreate_client(
+        os.environ["SUPABASE_URL"],
+        os.environ["SUPABASE_SERVICE_KEY"],
+    )
 
     # async client for supabase
-    supabase = await get_supabase_client()
+    # supabase = await get_supabase_client()
 
     page = 1  # starting page
     has_next = True
@@ -73,7 +75,18 @@ async def seed():
                 headers={"Content-Type": "application/json"},
             )
 
-        page_data = response.json()["data"]["Page"]
+        response.raise_for_status()
+        payload = response.json()
+
+        if "errors" in payload:
+            print(f"AniList API error on page {page}: {payload['errors']}")
+            break
+
+        page_data = payload.get("data", {}).get("Page")
+        if page_data is None:
+            print(f"No page data returned for page {page}")
+            break
+
         anime_list = page_data["media"]
         has_next = page_data["pageInfo"]["hasNextPage"]
 
@@ -114,4 +127,5 @@ async def seed():
         await asyncio.sleep(0.8)
 
 
-asyncio.run(seed())
+if __name__ == "__main__":
+    asyncio.run(seed())
