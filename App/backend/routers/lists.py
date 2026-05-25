@@ -197,17 +197,15 @@ async def change_specific_list(
     try:
         supabase = await get_supabase_client()
         # make the update if the owner_id and list_id matches
-        await (
-            supabase.rpc(
-                "update_list_and_entries",
-                {
-                    "p_list_id": list_id,
-                    "p_user_id": user.id,
-                    "p_title": payload.list_data.title,
-                    "p_description": payload.list_data.description,
-                    "p_entries": [entry.model_dump() for entry in payload.entries],
-                },
-            )
+        await supabase.rpc(
+            "update_list_and_entries",
+            {
+                "p_list_id": list_id,
+                "p_user_id": user.id,
+                "p_title": payload.list_data.title,
+                "p_description": payload.list_data.description,
+                "p_entries": [entry.model_dump() for entry in payload.entries],
+            },
         ).execute()
 
         return {"message": "The list and entries have been updated"}
@@ -248,7 +246,7 @@ async def delete_specific_list(list_id: str, authorization: str = Header(...)):
         raise HTTPException(status_code=500, detail=f"Failed to delete your list: {e}")
 
 
-# protected route (get users lists shown on profile page)
+# protected route (get specific users lists shown on profile page)
 @router.get("/user-lists")
 async def get_users_lists(authorization: str = Header(...)):
     # check if the user is validated
@@ -256,6 +254,55 @@ async def get_users_lists(authorization: str = Header(...)):
     # NOTE: make sure RLS is added to the table before hand so the user can only get their own data
     # handle if there are no tables
     # return lists to the frontend
+    pass
+
+
+# TODO: STILL HAVE TO MAKE SCHEMA MATCH SUPABASE TABLE FOR WATCHLIST (make request schema and response model)
+@router.get("/watchlist")
+async def get_user_watch_list(authorization: str = Header(...)):
+    # validate user
+    # try
+    # await the users tables
+    # handle id the user has no watchlist yet
+    # return the watch list to the users
+    # catch errors
+    # raise HTTPException
+    pass
+
+
+@router.get("/watchlist/{watched_id}")
+async def check_if_watched(authorization: str = Header(...)):
+    # NOTE: MIGHT RETURN AN ARRAY WITH ALL THE WATCHED ANIME SO THAT FRONTEND CAN HANDLE IT SHOW WATCHED ANIME EASIER
+    # validate the user_id
+    # try
+    # check if the anime is in the user watchlist
+    # if it exists return a true so frontend can mark the ones that are watched
+    # catch
+    # HTTPException
+    pass
+
+
+@router.post("/watchlist/{watched_id}")
+async def add_to_watchlist(authorization: str = Header(...)):
+    # validate user
+    # try
+    # NOTE: anime_id is recieved to be able to used as refference for user watchlist
+    #
+    # await handle multiple additions to the watched list (rate limit so they can't add more than a certain amount)
+    # return sucess so it can toast on the frontend
+    # catch errors
+    # raise HTTPException
+    pass
+
+
+@router.delete("/watchlist/{watched_id}")
+async def remove_from_watchlist(authorization: str = Header(...)):
+    # validate user
+    # try
+    # remove the specific watchlist from the database
+    # return sucess so it can toast on the frontend (want check mark on the frontend for watched shows)
+    # catch errors
+    # raise HTTPException
     pass
 
 
