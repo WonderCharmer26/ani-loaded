@@ -16,6 +16,15 @@ from schemas.lists import (
     UserListResponseWrapper,
     SpecificUserListWithAnime,
 )
+from schemas.watchlist import (
+    UserWatchlistExistsResponse,
+    UserWatchlistListResponse,
+    UserWatchlistRequest,
+    UserWatchlistResponse,
+    UserWatchlistStatusResponse,
+    UserWatchlistStatusUpdateRequest,
+    UserWatchlistSuccessMessage,
+)
 from utilities.auth_validator import auth_validator
 from utilities.anilist_client import fetch_anilist_media_map
 
@@ -259,51 +268,199 @@ async def get_users_lists(authorization: str = Header(...)):
 
 # TODO: STILL HAVE TO MAKE SCHEMA MATCH SUPABASE TABLE FOR WATCHLIST (make request schema and response model)
 @router.get("/watchlist")
-async def get_user_watch_list(authorization: str = Header(...)):
-    # validate user
-    # try
-    # await the users tables
-    # handle id the user has no watchlist yet
-    # return the watch list to the users
-    # catch errors
-    # raise HTTPException
-    pass
+async def get_user_watch_list(
+    authorization: str = Header(...),
+) -> UserWatchlistListResponse:
+    user: User = await auth_validator(authorization)
+
+    try:
+        supabase = await get_supabase_client()
+        res = await (
+            supabase.table("user_watchlist")
+            .select("user_id, anime_id, title, genres, status, created_at, updated_at")
+            .eq("user_id", str(user.id))
+            .execute()
+        )
+
+        validated = [UserWatchlistResponse.model_validate(item) for item in res.data or []]
+        return {"watchlist": validated}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch watchlist: {e}")
 
 
 @router.get("/watchlist/{watched_id}")
-async def check_if_watched(authorization: str = Header(...)):
-    # NOTE: MIGHT RETURN AN ARRAY WITH ALL THE WATCHED ANIME SO THAT FRONTEND CAN HANDLE IT SHOW WATCHED ANIME EASIER
-    # validate the user_id
-    # try
-    # check if the anime is in the user watchlist
-    # if it exists return a true so frontend can mark the ones that are watched
-    # catch
-    # HTTPException
-    pass
+async def check_if_watched(
+    watched_id: int, authorization: str = Header(...)
+) -> UserWatchlistExistsResponse:
+    user: User = await auth_validator(authorization)
+
+    try:
+        supabase = await get_supabase_client()
+        res = await (
+            supabase.table("user_watchlist")
+            .select("user_id, anime_id, title, genres, status, created_at, updated_at")
+            .eq("user_id", str(user.id))
+            .eq("anime_id", watched_id)
+            .execute()
+        )
+
+        if not res.data:
+            return {"in_watchlist": False, "item": None}
+
+        return {
+            "in_watchlist": True,
+            "item": UserWatchlistResponse.model_validate(res.data[0]),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to check watchlist item: {e}")
 
 
 @router.post("/watchlist/{watched_id}")
-async def add_to_watchlist(authorization: str = Header(...)):
-    # validate user
-    # try
-    # NOTE: anime_id is recieved to be able to used as refference for user watchlist
-    #
-    # await handle multiple additions to the watched list (rate limit so they can't add more than a certain amount)
-    # return sucess so it can toast on the frontend
-    # catch errors
-    # raise HTTPException
-    pass
+async def add_to_watchlist(
+    watched_id: int,
+    payload: UserWatchlistRequest,
+    authorization: str = Header(...),
+) -> UserWatchlistSuccessMessage:
+    if watched_id != payload.anime_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Path anime id must match payload anime_id",
+        )
+
+    user: User = await auth_validator(authorization)
+
+    try:
+        supabase = await get_supabase_client()
+        insert_payload = {
+            "user_id": str(user.id),
+            "anime_id": payload.anime_id,
+            "title": payload.title.strip(),
+            "genres": payload.genres,
+            "status": payload.status,
+        }
+
+        await (
+            supabase.table("user_watchlist")
+            .upsert(insert_payload, on_conflict="user_id,anime_id")
+            .execute()
+        )
+
+        return {"message": "Anime added to watchlist"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to add watchlist item: {e}")
+
+
+@router.patch("/watchlist/{watched_id}")
+async def update_watchlist_status(
+    watched_id: int,
+    payload: UserWatchlistStatusUpdateRequest,
+    authorization: str = Header(...),
+) -> UserWatchlistSuccessMessage:
+    user: User = await auth_validator(authorization)
+
+    try:
+        supabase = await get_supabase_client()
+        res = await (
+            supabase.table("user_watchlist")
+            .update({"status": payload.status})
+            .eq("user_id", str(user.id))
+            .eq("anime_id", watched_id)
+            .execute()
+        )
+
+        if not res.data:
+            raise HTTPException(status_code=404, detail="Watchlist item was not found")
+
+        return {"message": "Watchlist status updated"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update watchlist item: {e}")
 
 
 @router.delete("/watchlist/{watched_id}")
-async def remove_from_watchlist(authorization: str = Header(...)):
-    # validate user
-    # try
-    # remove the specific watchlist from the database
-    # return sucess so it can toast on the frontend (want check mark on the frontend for watched shows)
-    # catch errors
-    # raise HTTPException
-    pass
+async def remove_from_watchlist(
+    watched_id: int, authorization: str = Header(...)
+) -> UserWatchlistSuccessMessage:
+    user: User = await auth_validator(authorization)
+
+    try:
+        supabase = await get_supabase_client()
+        res = await (
+            supabase.table("user_watchlist")
+            .delete()
+            .eq("user_id", str(user.id))
+            .eq("anime_id", watched_id)
+            .execute()
+        )
+
+        if not res.data:
+            raise HTTPException(status_code=404, detail="Watchlist item was not found")
+
+        return {"message": "Anime removed from watchlist"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to remove watchlist item: {e}")
+
+
+@router.get("/watchlist/status/{anime_id}")
+async def get_watchlist_status(
+    anime_id: int,
+    authorization: str = Header(...),
+) -> UserWatchlistStatusResponse:
+    user: User = await auth_validator(authorization)
+
+    try:
+        supabase = await get_supabase_client()
+        res = await (
+            supabase.table("user_watchlist")
+            .select("anime_id, status")
+            .eq("user_id", str(user.id))
+            .eq("anime_id", anime_id)
+            .execute()
+        )
+
+        if not res.data:
+            return {"anime_id": anime_id, "in_watchlist": False, "status": None}
+
+        row = res.data[0]
+        return {
+            "anime_id": row["anime_id"],
+            "in_watchlist": True,
+            "status": row["status"],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch watchlist status: {e}")
+
+
+@router.get("/users/{user_id}/watchlist")
+async def get_user_watchlist_by_user_id(user_id: str) -> UserWatchlistListResponse:
+    try:
+        supabase = await get_supabase_client()
+        res = await (
+            supabase.table("user_watchlist")
+            .select("user_id, anime_id, title, genres, status, created_at, updated_at")
+            .eq("user_id", user_id)
+            .execute()
+        )
+
+        validated = [UserWatchlistResponse.model_validate(item) for item in res.data or []]
+        return {"watchlist": validated}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch user watchlist by user id: {e}"
+        )
 
 
 @router.get("/popular-lists")
