@@ -1,11 +1,19 @@
 import { AniListMedia } from "../schemas/animeSchemas";
-import { Star } from "lucide-react";
+import { Check, Star } from "lucide-react";
 
 interface AnimeBannerProps {
   anime: AniListMedia;
+  isInWatchlist: boolean;
+  isPending: boolean;
+  onToggleWatchlist: () => void;
 }
 
-export const AnimeBanner: React.FC<AnimeBannerProps> = ({ anime }) => {
+export const AnimeBanner: React.FC<AnimeBannerProps> = ({
+  anime,
+  isInWatchlist,
+  isPending,
+  onToggleWatchlist,
+}) => {
   if (!anime.bannerImage) {
     // NOTE: show replacement banner or show another style if there's no banner data
     return null;
@@ -31,8 +39,22 @@ export const AnimeBanner: React.FC<AnimeBannerProps> = ({ anime }) => {
             <button className="flex items-center justify-center bg-[#26242A] text-sm h-11 p-3 rounded-lg uppercase">
               add to list
             </button>
-            <button className="flex items-center justify-center bg-[#246C99] text-sm p-3 h-11 rounded-lg uppercase">
-              add to watch list
+            <button
+              type="button"
+              onClick={onToggleWatchlist}
+              disabled={isPending}
+              className="flex items-center justify-center gap-2 bg-[#246C99] text-sm p-3 h-11 rounded-lg uppercase disabled:opacity-60"
+            >
+              {isPending ? (
+                "updating..."
+              ) : isInWatchlist ? (
+                <>
+                  <Check size={16} />
+                  In Watchlist
+                </>
+              ) : (
+                "add to watch list"
+              )}
             </button>
             {/* NOTE: CHANGE THE FILL COLOR TO THE BLUE IF THE USER FAVORITES THE ANIME AND ADDS IT TO THEIR LIST */}
             <Star size={32} fill="white" />
