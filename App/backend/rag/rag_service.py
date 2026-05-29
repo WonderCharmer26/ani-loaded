@@ -45,7 +45,7 @@ async def get_user_watched_ids(user_id: str) -> list[int]:
         supabase.table("user_watchlist")
         .select("anime_id")
         .eq("user_id", user_id)
-        .eq("watched", True)
+        .eq("status", "completed")
         .execute()
     )
 

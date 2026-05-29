@@ -24,6 +24,20 @@ def _make_list_row_no_owner_id(**overrides):
     return row
 
 
+def _watchlist_row(**overrides):
+    row = {
+        "user_id": "user-uuid-1",
+        "anime_id": 1,
+        "title": "Test Anime",
+        "genres": ["Action", "Drama"],
+        "status": "watching",
+        "created_at": "2024-01-01T00:00:00",
+        "updated_at": "2024-01-01T00:00:00",
+    }
+    row.update(overrides)
+    return row
+
+
 # ---------------------------------------------------------------------------
 # GET /lists
 # ---------------------------------------------------------------------------
@@ -276,6 +290,107 @@ async def test_delete_list_not_found_returns_404(async_client, monkeypatch):
 
     response = await async_client.delete("/list/nonexistent-id", headers=_auth_headers())
     assert response.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Watchlist routes
+# ---------------------------------------------------------------------------
+
+
+async def test_get_watchlist_returns_wrapper(async_client, monkeypatch):
+    fake_user = make_fake_user(user_id="user-uuid-1")
+    monkeypatch.setattr("routers.lists.auth_validator", AsyncMock(return_value=fake_user))
+
+    builder = make_supabase_builder(execute_data=[_watchlist_row()])
+    monkeypatch.setattr(
+        "routers.lists.get_supabase_client", AsyncMock(return_value=builder)
+    )
+
+    response = await async_client.get("/watchlist", headers=_auth_headers())
+    assert response.status_code == 200
+    payload = response.json()
+    assert "watchlist" in payload
+    assert payload["watchlist"][0]["status"] == "watching"
+
+
+async def test_post_watchlist_mismatched_path_payload_returns_400(async_client, monkeypatch):
+    fake_user = make_fake_user(user_id="user-uuid-1")
+    monkeypatch.setattr("routers.lists.auth_validator", AsyncMock(return_value=fake_user))
+
+    response = await async_client.post(
+        "/watchlist/2",
+        json={
+            "anime_id": 1,
+            "title": "Test Anime",
+            "genres": ["Action"],
+            "status": "watching",
+        },
+        headers=_auth_headers(),
+    )
+    assert response.status_code == 400
+
+
+async def test_patch_watchlist_invalid_status_returns_422(async_client):
+    response = await async_client.patch(
+        "/watchlist/1",
+        json={"status": "queued"},
+        headers=_auth_headers(),
+    )
+    assert response.status_code == 422
+
+
+async def test_get_watchlist_status_found_returns_status(async_client, monkeypatch):
+    fake_user = make_fake_user(user_id="user-uuid-1")
+    monkeypatch.setattr("routers.lists.auth_validator", AsyncMock(return_value=fake_user))
+
+    builder = make_supabase_builder(execute_data=[{"anime_id": 1, "status": "completed"}])
+    monkeypatch.setattr(
+        "routers.lists.get_supabase_client", AsyncMock(return_value=builder)
+    )
+
+    response = await async_client.get("/watchlist/status/1", headers=_auth_headers())
+    assert response.status_code == 200
+    assert response.json() == {
+        "anime_id": 1,
+        "in_watchlist": True,
+        "status": "completed",
+    }
+
+
+async def test_get_watchlist_status_not_found_returns_null_status(async_client, monkeypatch):
+    fake_user = make_fake_user(user_id="user-uuid-1")
+    monkeypatch.setattr("routers.lists.auth_validator", AsyncMock(return_value=fake_user))
+
+    builder = make_supabase_builder(execute_data=[])
+    monkeypatch.setattr(
+        "routers.lists.get_supabase_client", AsyncMock(return_value=builder)
+    )
+
+    response = await async_client.get("/watchlist/status/1", headers=_auth_headers())
+    assert response.status_code == 200
+    assert response.json() == {
+        "anime_id": 1,
+        "in_watchlist": False,
+        "status": None,
+    }
+
+
+async def test_get_users_watchlist_returns_all_statuses(async_client, monkeypatch):
+    builder = make_supabase_builder(
+        execute_data=[
+            _watchlist_row(status="plan_to_watch"),
+            _watchlist_row(anime_id=2, status="completed"),
+            _watchlist_row(anime_id=3, status="on_hold"),
+        ]
+    )
+    monkeypatch.setattr(
+        "routers.lists.get_supabase_client", AsyncMock(return_value=builder)
+    )
+
+    response = await async_client.get("/users/user-uuid-1/watchlist")
+    assert response.status_code == 200
+    statuses = [item["status"] for item in response.json()["watchlist"]]
+    assert statuses == ["plan_to_watch", "completed", "on_hold"]
 
 
 # ---------------------------------------------------------------------------
