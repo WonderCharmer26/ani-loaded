@@ -1,11 +1,14 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   signOutUser,
   updateUserMetadata,
   updateUserPassword,
 } from "../services/supabase/supabaseAuth";
-
-// supabases built in user class
+import { useQuery } from "@tanstack/react-query";
+import { getUserWatchlist } from "../services/api/userWatchlistService";
+import type { UserWatchlistResponse } from "../schemas/zod/userWatchlistSchema";
+import { getAnimeInfo } from "../services/api/fetchAnimes";
+import type { AniListMedia } from "../schemas/animeSchemas";
 import { useAuthContext } from "../services/supabase/hooks/AuthProvider";
 
 export default function UserProfilePage() {
@@ -20,6 +23,8 @@ export default function UserProfilePage() {
   const [avatarModalOpen, setAvatarModalOpen] = useState(false);
   const [username, setUsername] = useState("");
   const [updatingUsername, setUpdatingUsername] = useState(false);
+  const [genreFilter, setGenreFilter] = useState("All");
+  const [statusFilter, setStatusFilter] = useState("All");
 
   // Read shared auth state from provider so every page uses the same source.
   const { user, loading, refreshUser } = useAuthContext();
@@ -28,6 +33,46 @@ export default function UserProfilePage() {
   useEffect(() => {
     setUsername(user?.user_metadata?.username || "");
   }, [user]);
+
+  // Fetch watchlist items lazily — only when the watchlist tab is active.
+  const { data: watchlistData, isLoading: watchlistLoading } = useQuery({
+    queryKey: ["userWatchlist"],
+    queryFn: getUserWatchlist,
+    enabled: activeTab === "watchlist" && !!user,
+  });
+  const watchlistItems: UserWatchlistResponse[] = watchlistData?.watchlist ?? [];
+
+  // Fetch full AniList data for every watchlist entry in parallel.
+  const watchlistIds = watchlistItems.map((item) => item.anime_id);
+  const { data: animeDataList, isLoading: animeLoading } = useQuery({
+    queryKey: ["watchlistAnimeData", watchlistIds],
+    queryFn: () => Promise.all(watchlistIds.map((id) => getAnimeInfo(id))),
+    enabled: watchlistIds.length > 0,
+  });
+
+  // Merge watchlist metadata with full anime info.
+  const mergedWatchlist = useMemo(() => {
+    if (!animeDataList) return [];
+    return watchlistItems
+      .map((item, i) => ({ item, anime: animeDataList[i] }))
+      .filter((e) => !!e.anime);
+  }, [watchlistItems, animeDataList]);
+
+  // Unique genres from the user's actual watchlist (for filter chips).
+  const watchlistGenres = useMemo(() => {
+    const all = mergedWatchlist.flatMap(({ anime }) => anime.genres ?? []);
+    return ["All", ...Array.from(new Set(all)).sort()];
+  }, [mergedWatchlist]);
+
+  const filteredWatchlist = useMemo(() => {
+    return mergedWatchlist.filter(({ item, anime }) => {
+      const genreMatch =
+        genreFilter === "All" || (anime.genres ?? []).includes(genreFilter);
+      const statusMatch =
+        statusFilter === "All" || item.status === statusFilter;
+      return genreMatch && statusMatch;
+    });
+  }, [mergedWatchlist, genreFilter, statusFilter]);
 
   // Predefined anime avatars
   // TODO: Make profile pics and strore them in a bucket to be brought in for selection
@@ -293,7 +338,7 @@ export default function UserProfilePage() {
         <div className="max-w-4xl mx-auto space-y-8">
           {/* Tabs */}
           <div className="flex gap-1 border-b border-slate-700">
-            {["overview", "settings"].map((tab) => (
+            {["overview", "watchlist", "settings"].map((tab) => (
               <button
                 key={tab}
                 type="button"
@@ -337,6 +382,101 @@ export default function UserProfilePage() {
                   />
                 </div>
               </div>
+            </div>
+          )}
+
+          {activeTab === "watchlist" && (
+            <div className="space-y-5">
+              {/* Genre filter chips */}
+              <div className="flex flex-wrap gap-2">
+                {watchlistGenres.map((g) => (
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={() => setGenreFilter(g)}
+                    style={{
+                      padding: "7px 15px",
+                      borderRadius: 20,
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                      letterSpacing: "0.03em",
+                      textTransform: "uppercase",
+                      cursor: "pointer",
+                      transition: "all 120ms",
+                      border:
+                        genreFilter === g
+                          ? "1px solid #3CB4FF"
+                          : "1px solid rgba(255,255,255,0.15)",
+                      background:
+                        genreFilter === g
+                          ? "rgba(60,180,255,0.16)"
+                          : "transparent",
+                      color:
+                        genreFilter === g ? "#3CB4FF" : "rgba(168,168,168,1)",
+                    }}
+                  >
+                    {g}
+                  </button>
+                ))}
+              </div>
+
+              {/* Status filter chips */}
+              <div className="flex flex-wrap gap-2">
+                {WATCHLIST_STATUSES.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setStatusFilter(s)}
+                    style={{
+                      padding: "7px 15px",
+                      borderRadius: 20,
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                      letterSpacing: "0.03em",
+                      textTransform: "uppercase",
+                      cursor: "pointer",
+                      transition: "all 120ms",
+                      border:
+                        statusFilter === s
+                          ? `1px solid ${STATUS_COLORS[s] ?? "#3CB4FF"}`
+                          : "1px solid rgba(255,255,255,0.15)",
+                      background:
+                        statusFilter === s
+                          ? (STATUS_BG[s] ?? "rgba(60,180,255,0.16)")
+                          : "transparent",
+                      color:
+                        statusFilter === s
+                          ? (STATUS_COLORS[s] ?? "#3CB4FF")
+                          : "rgba(168,168,168,1)",
+                    }}
+                  >
+                    {s === "All" ? "All Statuses" : STATUS_LABELS[s]}
+                  </button>
+                ))}
+              </div>
+
+              {/* Grid */}
+              {watchlistLoading || animeLoading ? (
+                <p className="text-slate-400 text-sm py-10 text-center">
+                  Loading watchlist…
+                </p>
+              ) : filteredWatchlist.length === 0 ? (
+                <p className="text-slate-400 text-sm py-10 text-center">
+                  {mergedWatchlist.length === 0
+                    ? "Your watchlist is empty."
+                    : "No shows match this filter."}
+                </p>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                  {filteredWatchlist.map(({ anime, item }) => (
+                    <WatchlistCard
+                      key={item.anime_id}
+                      anime={anime}
+                      item={item}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -491,6 +631,113 @@ export default function UserProfilePage() {
   );
 }
 
+// ─── Watchlist status display helpers ────────────────────────────────────────
+
+const WATCHLIST_STATUSES = [
+  "All",
+  "plan_to_watch",
+  "watching",
+  "completed",
+  "on_hold",
+  "dropped",
+];
+
+const STATUS_LABELS: Record<string, string> = {
+  plan_to_watch: "Plan to Watch",
+  watching: "Watching",
+  completed: "Completed",
+  on_hold: "On Hold",
+  dropped: "Dropped",
+};
+
+const STATUS_COLORS: Record<string, string> = {
+  All: "#3CB4FF",
+  plan_to_watch: "#3CB4FF",
+  watching: "#22c55e",
+  completed: "#94a3b8",
+  on_hold: "#eab308",
+  dropped: "#ef4444",
+};
+
+const STATUS_BG: Record<string, string> = {
+  All: "rgba(60,180,255,0.16)",
+  plan_to_watch: "rgba(60,180,255,0.16)",
+  watching: "rgba(34,197,94,0.16)",
+  completed: "rgba(148,163,184,0.16)",
+  on_hold: "rgba(234,179,8,0.16)",
+  dropped: "rgba(239,68,68,0.16)",
+};
+
+// ─── WatchlistCard ────────────────────────────────────────────────────────────
+// Matches AnimeCard visually (cover image, hover overlay, score badge) but
+// fills its grid cell responsively and adds a watchlist-status badge.
+function WatchlistCard({
+  anime,
+  item,
+}: {
+  anime: AniListMedia;
+  item: UserWatchlistResponse;
+}) {
+  const title =
+    anime.title?.english ?? anime.title?.romaji ?? item.title;
+
+  return (
+    <a href={`/anime/${anime.id}`} style={{ textDecoration: "none" }}>
+      <div
+        className="group relative cursor-pointer rounded-2xl overflow-hidden"
+        style={{ aspectRatio: "4/7" }}
+      >
+        {/* Cover image */}
+        <img
+          src={anime.coverImage?.large ?? ""}
+          alt={title}
+          className="w-full h-full object-cover border-2 border-black rounded-2xl transition-transform duration-200 group-hover:scale-[1.025]"
+        />
+
+        {/* Status badge — top left */}
+        <div
+          className="absolute top-2 left-2 px-2 py-0.5 rounded font-bold"
+          style={{
+            background: "rgba(9,9,9,0.78)",
+            border: `1.5px solid ${STATUS_COLORS[item.status]}`,
+            color: STATUS_COLORS[item.status],
+            fontSize: 10,
+            letterSpacing: "0.05em",
+            backdropFilter: "blur(2px)",
+          }}
+        >
+          {STATUS_LABELS[item.status]}
+        </div>
+
+        {/* Hover overlay — matches AnimeCard style */}
+        <div className="absolute opacity-0 bg-black/70 inset-0 transition-opacity duration-200 pointer-events-none group-hover:opacity-100 rounded-2xl">
+          <div className="absolute inset-x-0 top-0 p-3 flex flex-col gap-1">
+            <p className="text-sm font-bold text-white leading-tight line-clamp-3">
+              {title}
+            </p>
+            {anime.episodes && (
+              <p className="text-xs text-slate-300">
+                Episodes: {anime.episodes}
+              </p>
+            )}
+            {anime.status && (
+              <p className="text-xs text-slate-300">{anime.status}</p>
+            )}
+          </div>
+          {anime.averageScore && (
+            <div className="absolute bottom-4 left-2">
+              <div className="flex h-11 w-11 items-center justify-center rounded-full border-4 border-[#3CB4FF] text-sm font-bold text-white bg-black/50">
+                {anime.averageScore}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </a>
+  );
+}
+
+// ─── InfoField ────────────────────────────────────────────────────────────────
 // small helper component for displaying read-only info fields
 function InfoField({ label, value }: { label: string; value: string }) {
   return (
