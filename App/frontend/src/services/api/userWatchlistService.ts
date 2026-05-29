@@ -18,6 +18,7 @@ import {
   type UserWatchlistSuccessMessage,
 } from "@/schemas/zod/userWatchlistSchema";
 
+// NOTE: make into a helper function that would would be able to be used in other functions that need the access_token passed in
 const getAuthHeader = async (): Promise<{ Authorization: string }> => {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
@@ -30,17 +31,20 @@ const getAuthHeader = async (): Promise<{ Authorization: string }> => {
   return { Authorization: `Bearer ${token}` };
 };
 
-export const getUserWatchlist = async (): Promise<UserWatchlistListResponse> => {
-  const headers = await getAuthHeader();
-  const response = await axios.get(`${backendUrl}/watchlist`, { headers });
-  return UserWatchlistListResponseSchema.parse(response.data);
-};
+export const getUserWatchlist =
+  async (): Promise<UserWatchlistListResponse> => {
+    const headers = await getAuthHeader();
+    const response = await axios.get(`${backendUrl}/watchlist`, { headers });
+    return UserWatchlistListResponseSchema.parse(response.data);
+  };
 
-export const checkWatchlistItem = async (
+export const checkIfAnimeInWatchlist = async (
   animeId: number,
 ): Promise<UserWatchlistExistsResponse> => {
   const headers = await getAuthHeader();
-  const response = await axios.get(`${backendUrl}/watchlist/${animeId}`, { headers });
+  const response = await axios.get(`${backendUrl}/watchlist/${animeId}`, {
+    headers,
+  });
   return UserWatchlistExistsResponseSchema.parse(response.data);
 };
 
@@ -63,7 +67,8 @@ export const updateWatchlistStatus = async (
   payload: UserWatchlistStatusUpdateRequest,
 ): Promise<UserWatchlistSuccessMessage> => {
   const headers = await getAuthHeader();
-  const validatedPayload = UserWatchlistStatusUpdateRequestSchema.parse(payload);
+  const validatedPayload =
+    UserWatchlistStatusUpdateRequestSchema.parse(payload);
   const response = await axios.patch(
     `${backendUrl}/watchlist/${animeId}`,
     validatedPayload,
@@ -86,9 +91,12 @@ export const getWatchlistStatus = async (
   animeId: number,
 ): Promise<UserWatchlistStatusResponse> => {
   const headers = await getAuthHeader();
-  const response = await axios.get(`${backendUrl}/watchlist/status/${animeId}`, {
-    headers,
-  });
+  const response = await axios.get(
+    `${backendUrl}/watchlist/status/${animeId}`,
+    {
+      headers,
+    },
+  );
   return UserWatchlistStatusResponseSchema.parse(response.data);
 };
 
