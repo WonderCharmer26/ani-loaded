@@ -204,7 +204,7 @@ async def change_specific_list(
     user: User = await auth_validator(authorization)
 
     try:
-        supabase = await get_supabase_client()
+        supabase = await get_supabase_client(authorization)
         # make the update if the owner_id and list_id matches
         await supabase.rpc(
             "update_list_and_entries",
@@ -232,7 +232,7 @@ async def delete_specific_list(list_id: str, authorization: str = Header(...)):
     user: User = await auth_validator(authorization)
 
     try:
-        supabase = await get_supabase_client()
+        supabase = await get_supabase_client(authorization)
         res = await (
             supabase.table("user_list")
             .delete()
@@ -274,7 +274,7 @@ async def get_user_watch_list(
     user: User = await auth_validator(authorization)
 
     try:
-        supabase = await get_supabase_client()
+        supabase = await get_supabase_client(authorization)
         res = await (
             supabase.table("user_watchlist")
             .select("user_id, anime_id, title, genres, status, created_at, updated_at")
@@ -297,7 +297,7 @@ async def check_if_watched(
     user: User = await auth_validator(authorization)
 
     try:
-        supabase = await get_supabase_client()
+        supabase = await get_supabase_client(authorization)
         res = await (
             supabase.table("user_watchlist")
             .select("user_id, anime_id, title, genres, status, created_at, updated_at")
@@ -334,7 +334,10 @@ async def add_to_watchlist(
     user: User = await auth_validator(authorization)
 
     try:
-        supabase = await get_supabase_client()
+        supabase = await get_supabase_client(authorization)
+        anime_payload = {
+            "id": payload.anime_id,
+        }
         insert_payload = {
             "user_id": str(user.id),
             "anime_id": payload.anime_id,
@@ -342,6 +345,9 @@ async def add_to_watchlist(
             "genres": payload.genres,
             "status": payload.status,
         }
+
+        # Ensure anime row exists first for foreign key integrity.
+        await supabase.table("anime").upsert(anime_payload, on_conflict="id").execute()
 
         await (
             supabase.table("user_watchlist")
@@ -365,7 +371,7 @@ async def update_watchlist_status(
     user: User = await auth_validator(authorization)
 
     try:
-        supabase = await get_supabase_client()
+        supabase = await get_supabase_client(authorization)
         res = await (
             supabase.table("user_watchlist")
             .update({"status": payload.status})
@@ -391,7 +397,7 @@ async def remove_from_watchlist(
     user: User = await auth_validator(authorization)
 
     try:
-        supabase = await get_supabase_client()
+        supabase = await get_supabase_client(authorization)
         res = await (
             supabase.table("user_watchlist")
             .delete()
@@ -418,7 +424,7 @@ async def get_watchlist_status(
     user: User = await auth_validator(authorization)
 
     try:
-        supabase = await get_supabase_client()
+        supabase = await get_supabase_client(authorization)
         res = await (
             supabase.table("user_watchlist")
             .select("anime_id, status")
@@ -476,7 +482,7 @@ async def create_list(
 ):
     # check if the user is validated (handles raising error) (gets back user obj)
     user: User = await auth_validator(authorization)
-    supabase = await get_supabase_client()
+    supabase = await get_supabase_client(authorization)
 
     # store the entries to break down
     entries = payload.entries
