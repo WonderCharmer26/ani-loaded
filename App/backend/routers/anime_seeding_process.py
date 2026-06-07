@@ -37,7 +37,7 @@ query ($page: Int, $perPage: Int) {
 """
 
 
-# creat the embedding string taking the dict of the anime and form the embedding function
+# create the embedding string taking the dict of the anime and form the embedding function
 def build_embedding_text(anime: dict) -> str:
     title = anime["title"].get("english") or anime["title"].get("romaji", "")
     genres = ", ".join(anime.get("genres") or [])

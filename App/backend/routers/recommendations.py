@@ -28,6 +28,7 @@ async def get_agent_recommendations(
     user: User = await auth_validator(authorization)
 
     try:
+        # TODO: LOOK INTO TOOL CALLING AND MAKING SURE THAT WORKS AS WELL.
         response = await run_recommendation_agent(
             user_id=str(user.id),
             user_message=payload.user_message,
