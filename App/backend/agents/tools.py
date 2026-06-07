@@ -1,12 +1,10 @@
 from langchain_core.tools import tool
-from langchain_openai import OpenAIEmbeddings
-from langchain_community.vectorstores import SupabaseVectorStore
 
-from database.supabase_client import get_supabase_client
-
-# Initialize embeddings once at module level.
-# It only makes a call when you actually pass text into it.
-_embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+from rag.rag_service import (
+    get_completed_watchlist as rag_get_completed_watchlist,
+    get_users_whole_watchlist as rag_get_users_whole_watchlist,
+    search_similar_anime as rag_search_similar_anime,
+)
 
 
 @tool
@@ -17,51 +15,29 @@ async def search_similar_anime(query: str, match_count: int = 10) -> list[dict]:
     rather than just genre names. Returns a list of matching anime with metadata.
     """
 
-    supabase = await get_supabase_client()
-
-    # SupabaseVectorStore wraps our match_anime RPC function
-    vector_store = SupabaseVectorStore(
-        client=supabase,
-        embedding=_embeddings,
-        table_name="anime_embeddings",
-        query_name="match_anime",  # must match the SQL function name exactly, update if the name changes
-    )
-
-    results = await vector_store.asimilarity_search(query, k=match_count)
-
-    # Convert Document objects into plain dicts the agent can read and reason over
-    # We truncate description to 300 chars because we don't want to bloat the agent's context window
-    return [
-        {
-            "title": doc.metadata.get("title"),
-            "genres": doc.metadata.get("genres"),
-            "description": doc.page_content[:300],
-            "average_score": doc.metadata.get("average_score"),
-            "cover_url": doc.metadata.get("cover_url"),
-            "anilist_id": doc.metadata.get("id"),
-        }
-        for doc in results
-    ]
+    return await rag_search_similar_anime(query, match_count)
 
 
 @tool
-async def get_user_watched_list(user_id: str) -> list[int]:
+async def get_users_whole_watchlist(user_id: str) -> list[dict]:
+    # TODO: Add in schema to help with the return type of the data
     """
-    Fetch the list of anime IDs that the user has already added to their lists.
+    Fetch a list of anime IDs and statuses from the user's watchlist.
+    Use this when the agent needs the full watchlist context.
+    Returns a list of AniList IDs and statuses.
+    """
+
+    return await rag_get_users_whole_watchlist(user_id)
+
+
+# Tool to help with getting the anime that the user has watched from their watchlist
+@tool
+async def get_completed_watchlist(user_id: str) -> list[int]:
+    # TODO: Add in schema to help with the return type of the data
+    """
+    Fetch the list of anime IDs that the user has in their watchlist and has already seen.
     Use this first so you know what NOT to recommend (things they've already seen).
     Returns a list of AniList anime IDs.
     """
 
-    supabase = await get_supabase_client()
-
-    # We join user_list_entry → user_list to filter by the owner's user_id.
-    # The !inner syntax in PostgREST means it only returns entries where
-    # the join succeeds — equivalent to an INNER JOIN in SQL.
-    result = await (
-        supabase.table("user_list_entry")
-        .select("anime_id, user_list!inner(owner_id)")
-        .eq("user_list.owner_id", user_id)
-        .execute()
-    )
-
-    return [row["anime_id"] for row in result.data]
+    return await rag_get_completed_watchlist(user_id)
