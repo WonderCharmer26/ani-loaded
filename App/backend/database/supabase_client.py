@@ -14,7 +14,7 @@ _supabase: AsyncClient | None = None
 _supabase_lock = asyncio.Lock()
 
 
-# async function to handle getting the supabase connection
+# async function to handle getting the supabase connection when needed
 async def get_supabase_client(authorization: str | None = None) -> AsyncClient:
     global _supabase
 
