@@ -28,27 +28,40 @@ async def search_similar_anime(query: str, match_count: int = 10) -> list[dict]:
     return result.data
 
 
-# helper function to help with getting the users watched shows from their watched list
-# TODO: need to make sure zero watched list is handled
-# TODO: need to make sure that user has to be signed in before function is ran. Handle outside of the function with the auth validator
-async def get_user_watched_ids(user_id: str) -> list[int]:
+async def get_users_whole_watchlist(user_id: str) -> list[dict]:
     """
-    Pulls the user's completed list from Supabase so the agent
-    knows what NOT to recommend (already watched).
+    Fetch a list of anime IDs and statuses from the user's watchlist.
+    Returns a list of AniList IDs and statuses.
     """
 
-    # async
     supabase = await get_supabase_client()
 
-    # get the usesrs animes that they have marked as watched
+    result = await (
+        supabase.from_("user_watchlist")
+        .select("anime_id, status")
+        .eq("owner_id", user_id)
+        .execute()
+    )
+
+    return [
+        {"anime_id": row["anime_id"], "status": row["status"]} for row in result.data
+    ]
+
+
+async def get_completed_watchlist(user_id: str) -> list[int]:
+    """
+    Fetch the list of anime IDs that the user has completed.
+    Returns a list of AniList anime IDs.
+    """
+
+    supabase = await get_supabase_client()
+
     result = await (
         supabase.table("user_watchlist")
         .select("anime_id")
-        .eq("user_id", user_id)
+        .eq("owner_id", user_id)
         .eq("status", "completed")
         .execute()
     )
 
-    # return an array of the results of the anime from the db
-    # if not it's empty
     return [row["anime_id"] for row in result.data]

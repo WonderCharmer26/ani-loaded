@@ -2,15 +2,15 @@ from langchain_openai import ChatOpenAI
 from langchain.agents import create_agent
 
 # tools that I made for searching for needed info
-from agents.tools import search_similar_anime, get_user_watched_list
+from agents.tools import search_similar_anime, get_completed_watchlist
 
-# agent will get the most logical response from using tooling
+# model that we'll use
 _llm = ChatOpenAI(
     model="gpt-4o", temperature=0
 )  # might tweak the temp in for a better creativity on the response from the agent
 
 # gonna add more tooling later on
-_tools = [search_similar_anime, get_user_watched_list]
+_tools = [search_similar_anime, get_completed_watchlist]
 
 # create_agent builds the LangGraph state machine that runs the agent loop:
 #   reason → call tool → observe result → reason again → ... → final answer
@@ -24,7 +24,7 @@ You are an anime recommendation assistant for AniLoaded.
 The current user's ID is {user_id}.
 
 Follow these steps every time:
-1. Always call get_user_watched_list first so you know what the user has already seen.
+1. Always call get_completed_watchlist first so you know what the user has already seen.
 2. Use search_similar_anime with a rich, descriptive query based on what the user is asking for.
    Do not use short queries like "action anime" — be specific: "intense action with complex characters and dark themes".
 3. Filter out any results whose anilist_id appears in the user's watched list.
@@ -38,7 +38,7 @@ Be concise and helpful. Do not recommend anime the user has already seen.
 """
 
 
-# gonna make the users name instead
+# Orchastration agent - calls the tools that we set up what it needs to give the recommendation
 async def run_recommendation_agent(user_id: str, user_message: str) -> str:
     """
     Takes the user's ID and their message, runs the full agent loop,
