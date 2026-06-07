@@ -1,7 +1,10 @@
 import asyncio
-from openai import AsyncOpenAI
-from database.supabase_client import get_supabase_client
 import os
+
+from openai import AsyncOpenAI
+
+from database.supabase_client import get_supabase_client
+from schemas.recommendations import MatchedAnimeResponse
 
 openai = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
@@ -10,7 +13,9 @@ openai = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 
 # get the users query for embedding, and match_count for amount to match default 10
-async def search_similar_anime(query: str, match_count: int = 10) -> list[dict]:
+async def search_similar_anime(
+    query: str, match_count: int = 10
+) -> list[MatchedAnimeResponse]:
 
     # create the embedding from the users query
     embedding_response = await openai.embeddings.create(
@@ -29,7 +34,8 @@ async def search_similar_anime(query: str, match_count: int = 10) -> list[dict]:
         "match_anime", {"query_embedding": query_vector, "match_count": match_count}
     ).execute()
 
-    return result.data
+    # validate each row
+    return [MatchedAnimeResponse.model_validate(row) for row in result.data or []]
 
 
 async def get_users_whole_watchlist(user_id: str) -> list[dict]:
@@ -71,7 +77,9 @@ async def get_completed_watchlist(user_id: str) -> list[int]:
     return [row["anime_id"] for row in result.data]
 
 
-async def get_filtered_recommendations(user_id: str, query: str, match_count: int = 10):
+async def get_filtered_recommendations(
+    user_id: str, query: str, match_count: int = 10
+) -> list[MatchedAnimeResponse]:
     # run both queries concurrently (helps us with making sure that db calls stay fast)
     search_results, completed_ids = await asyncio.gather(
         search_similar_anime(query, match_count), get_completed_watchlist(user_id)
@@ -81,6 +89,4 @@ async def get_filtered_recommendations(user_id: str, query: str, match_count: in
     completed_set = set(completed_ids)
 
     # return an anime_id's of the shows that aren't in the completed_set of anime
-    return [
-        result for result in search_results if result["anime_id"] not in completed_set
-    ]
+    return [result for result in search_results if result.id not in completed_set]

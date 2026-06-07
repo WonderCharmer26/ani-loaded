@@ -5,10 +5,13 @@ from rag.rag_service import (
     get_users_whole_watchlist as rag_get_users_whole_watchlist,
     search_similar_anime as rag_search_similar_anime,
 )
+from schemas.recommendations import MatchedAnimeResponse
 
 
 @tool
-async def search_similar_anime(query: str, match_count: int = 10) -> list[dict]:
+async def search_similar_anime(
+    query: str, match_count: int = 10
+) -> list[MatchedAnimeResponse]:
     """
     Search the anime database for shows that match a plain-language description.
     Use descriptive queries like 'dark psychological thriller with an unreliable narrator'

@@ -3,6 +3,7 @@ from langchain.agents import create_agent
 
 # tools that I made for searching for needed info
 from agents.tools import search_similar_anime, get_completed_watchlist
+from schemas.recommendations import MatchedAnimeResponse
 
 # model that we'll use
 _llm = ChatOpenAI(
@@ -17,29 +18,34 @@ _tools = [search_similar_anime, get_completed_watchlist]
 # handles all the looping so we don't have to do it manually.
 _agent = create_agent(model=_llm, tools=_tools)
 
-# might add in the users username instead
+# TODO: Tweak the system prompt
 _SYSTEM_PROMPT = """
 You are an anime recommendation assistant for AniLoaded.
 
 The current user's ID is {user_id}.
 
-Follow these steps every time:
-1. Always call get_completed_watchlist first so you know what the user has already seen.
-2. Use search_similar_anime with a rich, descriptive query based on what the user is asking for.
-   Do not use short queries like "action anime" — be specific: "intense action with complex characters and dark themes".
-3. Filter out any results whose anilist_id appears in the user's watched list.
-4. Return 5 recommendations maximum. For each one include:
+Here are the list of anime recommendation options to choose from based on the users watch history and shows that matched the users request that have been filtered:
+{filtered_anime_suggestions}
+
+The array of anime suggestions to recommend have already been prefiltered to be shows that the use has not seen.
+They should already have the information that you would need to recommend them to the user.
+Make recommendations using these anime as options to show the user.
+Return no more than 5 recommendations maximum. For each one include:
    - Title
    - Genres
    - A short 1-2 sentence reason why it matches what the user is looking for
    - Average score if available
 
-Be concise and helpful. Do not recommend anime the user has already seen.
+Be concise and helpful.
 """
 
 
 # Orchastration agent - calls the tools that we set up what it needs to give the recommendation
-async def run_recommendation_agent(user_id: str, user_message: str) -> str:
+async def run_recommendation_agent(
+    user_id: str,
+    user_message: str,
+    filtered_anime_suggestions: list[MatchedAnimeResponse],
+) -> str:
     """
     Takes the user's ID and their message, runs the full agent loop,
     and returns the final text response.
@@ -51,7 +57,13 @@ async def run_recommendation_agent(user_id: str, user_message: str) -> str:
         {
             "messages": [
                 # System message sets the agent's behavior for this specific user
-                ("system", _SYSTEM_PROMPT.format(user_id=user_id)),
+                (
+                    "system",
+                    _SYSTEM_PROMPT.format(
+                        user_id=user_id,
+                        filtered_anime_suggestions=filtered_anime_suggestions,
+                    ),
+                ),
                 # The user's actual request
                 ("user", user_message),
             ]
