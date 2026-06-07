@@ -4,6 +4,8 @@ from gotrue.types import User
 from pydantic import BaseModel
 
 from agents.recommendation_agent import run_recommendation_agent
+from rag.rag_service import get_filtered_recommendations
+from schemas.recommendations import MatchedAnimeResponse
 from utilities.auth_validator import auth_validator
 
 router = APIRouter()
@@ -28,9 +30,15 @@ async def get_agent_recommendations(
     user: User = await auth_validator(authorization)
 
     try:
-        # TODO: LOOK INTO TOOL CALLING AND MAKING SURE THAT WORKS AS WELL.
+        # make a helper function to help with getting the username to help with passing it to the agent
+
+        filtered_results: list[MatchedAnimeResponse] = (
+            await get_filtered_recommendations(user.id, payload.user_message)
+        )  # match_count already has a default amount of 10
+
         response = await run_recommendation_agent(
             user_id=str(user.id),
+            filtered_anime_suggestions=filtered_results,
             user_message=payload.user_message,
         )
         return {"response": response}
