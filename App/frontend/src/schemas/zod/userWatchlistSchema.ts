@@ -21,8 +21,8 @@ export const UserWatchlistResponseSchema = z.object({
   title: z.string(),
   genres: z.array(z.string()),
   status: WatchlistStatusSchema,
-  created_at: z.string().datetime().nullable().optional(),
-  updated_at: z.string().datetime().nullable().optional(),
+  created_at: z.iso.datetime().nullable().optional(),
+  updated_at: z.iso.datetime().nullable().optional(),
 });
 
 export const UserWatchlistListResponseSchema = z.object({
