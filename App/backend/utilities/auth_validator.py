@@ -3,6 +3,7 @@ from typing import Any
 
 from database.supabase_client import get_supabase_client
 
+
 # helper function to help us to check auth
 async def auth_validator(authorization: str = Header(...)):
     if not authorization:

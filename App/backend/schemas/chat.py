@@ -15,6 +15,7 @@ class ChatSession(BaseModel):
 
     id: UUID
     user_id: UUID
+    title: str | None = None
     status: ChatSessionStatus = "active"
     message_count: int = Field(default=0, ge=0)
     reset_at: datetime | None = None

@@ -1,71 +1,73 @@
-// TODO: Work on recommendation functionality
-import type { AniListMedia } from "../../schemas/animeSchemas";
-import type { RecommendationBucket } from "../../schemas/recommendations";
+import axios from "axios";
+import { z } from "zod";
+import { toast } from "sonner";
 
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+import {
+  ChatSessionSchema,
+  ChatSessionWithMessagesSchema,
+  type ChatSession,
+  type ChatSessionWithMessages,
+} from "@/schemas/zod/chatSchema";
+import { backendUrl } from "./fetchAnimes";
+import { supabase } from "../supabase/supabaseConnection";
 
-const placeholderCover =
-  "https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=400&q=80";
+const ChatSessionListSchema = z.array(ChatSessionSchema);
 
-const makeAnime = (
-  id: number,
-  title: string,
-  genres: string[],
-): AniListMedia => ({
-  id,
-  title: { english: title },
-  episodes: 13,
-  coverImage: {
-    large: placeholderCover,
-    medium: placeholderCover,
-  },
-  genres,
-  description: "Mock recommendation entry.",
-  averageScore: 85,
-  status: "FINISHED",
-  studios: { nodes: [] },
-  characters: { edges: [] },
-});
+const getAuthHeader = async (): Promise<{ Authorization: string }> => {
+  const { data, error } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
 
-const mockForYou: RecommendationBucket[] = [
-  {
-    id: "bucket-1",
-    label: "Because you liked Found Family arcs",
-    reason: "Matches emotional beats from your recent completions.",
-    items: [
-      makeAnime(200, "Buddy Daddies", ["Action", "Comedy"]),
-      makeAnime(201, "March Comes in Like a Lion", ["Drama"]),
-    ],
-  },
-  {
-    id: "bucket-2",
-    label: "High-energy action",
-    reason: "Based on top rated shounen entries in your profile.",
-    items: [
-      makeAnime(202, "Chainsaw Man", ["Action"]),
-      makeAnime(203, "Dorohedoro", ["Fantasy"]),
-    ],
-  },
-];
-
-const globalFallback: AniListMedia[] = [
-  makeAnime(204, "Cowboy Bebop", ["Action", "Sci-Fi"]),
-  makeAnime(205, "Demon Slayer", ["Action"]),
-  makeAnime(206, "Spy x Family", ["Comedy"]),
-];
-
-export async function getPersonalizedRecommendations(
-  userId: string,
-): Promise<RecommendationBucket[]> {
-  await delay(210);
-  if (!userId) {
-    return [];
+  if (error) {
+    toast.error("Unable to validate your session.");
+    throw new Error("There was an error validating your session");
   }
-  return mockForYou;
+
+  if (!token) {
+    toast.info("Please sign in to use recommendations");
+    throw new Error("Missing auth token for recommendation request");
+  }
+
+  return { Authorization: `Bearer ${token}` };
+};
+
+export async function getRecommendationConversations(): Promise<ChatSession[]> {
+  const headers = await getAuthHeader();
+  const response = await axios.get(`${backendUrl}/recommendations/conversations`, {
+    headers,
+  });
+  return ChatSessionListSchema.parse(response.data);
 }
 
-export async function getFallbackRecommendations(): Promise<AniListMedia[]> {
-  await delay(120);
-  return globalFallback;
+export async function createRecommendationConversation(): Promise<ChatSession> {
+  const headers = await getAuthHeader();
+  const response = await axios.post(
+    `${backendUrl}/recommendations/conversations`,
+    {},
+    { headers },
+  );
+  return ChatSessionSchema.parse(response.data);
 }
 
+export async function getRecommendationConversation(
+  sessionId: string,
+): Promise<ChatSessionWithMessages> {
+  const headers = await getAuthHeader();
+  const response = await axios.get(
+    `${backendUrl}/recommendations/conversations/${sessionId}`,
+    { headers },
+  );
+  return ChatSessionWithMessagesSchema.parse(response.data);
+}
+
+export async function sendRecommendationMessage(
+  sessionId: string,
+  content: string,
+): Promise<ChatSessionWithMessages> {
+  const headers = await getAuthHeader();
+  const response = await axios.post(
+    `${backendUrl}/recommendations/conversations/${sessionId}/messages`,
+    { content },
+    { headers },
+  );
+  return ChatSessionWithMessagesSchema.parse(response.data);
+}

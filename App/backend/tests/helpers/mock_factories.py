@@ -155,6 +155,33 @@ def make_list_row(**overrides) -> dict:
     return row
 
 
+def make_chat_session_row(**overrides) -> dict:
+    row = {
+        "id": "00000000-0000-0000-0000-000000000101",
+        "user_id": "00000000-0000-0000-0000-000000000003",
+        "title": None,
+        "status": "active",
+        "message_count": 0,
+        "reset_at": None,
+        "created_at": "2024-01-01T00:00:00",
+        "last_active_at": "2024-01-01T00:00:00",
+    }
+    row.update(overrides)
+    return row
+
+
+def make_chat_message_row(**overrides) -> dict:
+    row = {
+        "id": "00000000-0000-0000-0000-000000000201",
+        "session_id": "00000000-0000-0000-0000-000000000101",
+        "role": "user",
+        "content": "Looking for dark fantasy anime",
+        "created_at": "2024-01-01T00:00:00",
+    }
+    row.update(overrides)
+    return row
+
+
 # ---------------------------------------------------------------------------
 # Supabase client mock helpers
 # ---------------------------------------------------------------------------

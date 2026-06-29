@@ -5,6 +5,7 @@ export const ChatSessionStatusSchema = z.enum(["active", "expired"]);
 export const ChatSessionSchema = z.object({
   id: z.uuid(),
   user_id: z.uuid(),
+  title: z.string().nullable().optional(),
   status: ChatSessionStatusSchema.default("active"),
   message_count: z.number().int().nonnegative().default(0),
   reset_at: z.iso.datetime().nullable().optional(),
@@ -26,6 +27,7 @@ export const ChatSessionWithMessagesSchema = ChatSessionSchema.extend({
   messages: z.array(ChatMessageSchema).default([]),
 });
 
+// export all the types of the Chat
 export type ChatSessionStatus = z.infer<typeof ChatSessionStatusSchema>;
 export type ChatSession = z.infer<typeof ChatSessionSchema>;
 export type ChatMessageRole = z.infer<typeof ChatMessageRoleSchema>;

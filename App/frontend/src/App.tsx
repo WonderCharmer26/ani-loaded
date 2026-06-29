@@ -24,7 +24,6 @@ import { queryClient } from "./services/clients/queryClient";
 import { discussionPageLoader } from "./services/loaders/discussionPageLoader";
 // import { listsPageLoader } from "./services/loaders/listsPageLoader";
 import { animeCategoriesLoader } from "./services/loaders/animeCategoriesLoader";
-import { recommendationsPageLoader } from "./services/loaders/recommendationsPageLoader";
 import DiscussionInfoPage from "./pages/DiscussionInfoPage";
 import { discussionInfoPrefetcher } from "./services/loaders/discussionInfoPrefetcher";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -37,10 +36,6 @@ import ListInfoPage from "./pages/ListInfoPage";
 // TODO: ADJUST THE TOASTER POSITIONING FOR THE APP
 
 // Fetching functions to get data for the HomePage
-const demoUserId = "demo-user"; // TODO: plug in real user data, supabase useAuth might handle this for me
-const demoUserToken = "demo-user-token"; // TODO: replace with real auth token from session
-// NOTE: might use supabase.auth.getUser to help with getting data for protected routes
-//
 // Create router configuration with layouts
 const router = createBrowserRouter([
   {
@@ -100,10 +95,8 @@ const router = createBrowserRouter([
       },
       {
         // Recommendation Page: Shows anime suggestion to the user for them to help pick an anime to watch
-        // TODO: Replace with the actual data fetching functions
         path: "recommendations",
         element: <RecommendationsPage />,
-        loader: recommendationsPageLoader(queryClient, demoUserId),
       },
       {
         // Profile page
