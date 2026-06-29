@@ -21,14 +21,13 @@ ANIME_BY_ID_CACHE_TTL_SECONDS = 1800  # 30 min
 # retry timeout
 ANILIST_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 
-# TODO: MOVE THESE FUNCTIONS TO SEPERATE PY FILE TO HELP KEEP STRUCTURE CLEAN
-
 
 # helper function to help keep raising status_code errors cleaner
 def _raise_anilist_service_error(status_code: int, detail: str) -> None:
     raise HTTPException(status_code=status_code, detail=detail)
 
 
+# TODO: MOVE THESE FUNCTIONS TO SEPERATE PY FILE TO HELP KEEP STRUCTURE CLEAN
 # helper to handle GraphQL errors
 def _has_forbidden_graphql_error(data: dict) -> bool:
     errors = data.get("errors")

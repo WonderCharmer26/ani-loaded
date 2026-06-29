@@ -2,6 +2,7 @@ from langchain_openai import ChatOpenAI
 from langchain.agents import create_agent
 
 # tools that I made for searching for needed info
+from schemas.chat import ChatMessage
 from agents.tools import search_similar_anime, get_completed_watchlist
 from schemas.recommendations import MatchedAnimeResponse
 
@@ -43,8 +44,8 @@ Be concise and helpful.
 # Orchastration agent - calls the tools that we set up what it needs to give the recommendation
 async def run_recommendation_agent(
     user_id: str,
-    user_message: str,
     filtered_anime_suggestions: list[MatchedAnimeResponse],
+    session_messages: list[ChatMessage],
 ) -> str:
     """
     Takes the user's ID and their message, runs the full agent loop,
@@ -64,8 +65,7 @@ async def run_recommendation_agent(
                         filtered_anime_suggestions=filtered_anime_suggestions,
                     ),
                 ),
-                # The user's actual request
-                ("user", user_message),
+                *[(message.role, message.content) for message in session_messages],
             ]
         }
     )
