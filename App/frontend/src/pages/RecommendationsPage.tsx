@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Plus, MessageSquareText } from "lucide-react";
+import { Plus, MessageSquareText, X } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useOutletContext } from "react-router-dom";
 
 import RecommendationInput from "../components/RecommendationInput";
+import type { RootLayoutOutletContext } from "../layouts/RootLayout";
 import type { ChatSession } from "../schemas/zod/chatSchema";
 import {
   createRecommendationConversation,
@@ -28,6 +30,8 @@ function formatConversationTime(timestamp?: string) {
 
 export default function RecommendationsPage() {
   const queryClient = useQueryClient();
+  const { isRecommendationsSidebarOpen, closeRecommendationsSidebar } =
+    useOutletContext<RootLayoutOutletContext>();
   const [activeConversationId, setActiveConversationId] = useState<string | null>(
     null,
   );
@@ -78,6 +82,7 @@ export default function RecommendationsPage() {
         },
       );
       setActiveConversationId(session.id);
+      closeRecommendationsSidebar();
     },
   });
 
@@ -139,19 +144,40 @@ export default function RecommendationsPage() {
     }
   };
 
+  const handleSelectConversation = (conversationId: string) => {
+    setActiveConversationId(conversationId);
+    closeRecommendationsSidebar();
+  };
+
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(60,180,255,0.08),transparent_28%),linear-gradient(180deg,#060a11,#0a1019)] px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-7xl flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-[#09111b]/95 shadow-[0_24px_90px_rgba(0,0,0,0.42)] lg:flex-row">
-        <aside className="w-full border-b border-white/8 bg-[linear-gradient(180deg,rgba(12,19,31,0.94),rgba(8,13,22,0.98))] p-5 lg:w-80 lg:border-b-0 lg:border-r">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#74cbff]">
-                Recommendation chats
-              </p>
-              <h1 className="mt-2 text-2xl font-semibold text-white">
-                Tune your next watch
-              </h1>
-            </div>
+      <div
+        className={`fixed inset-0 z-40 bg-black/55 transition-opacity duration-300 ${
+          isRecommendationsSidebarOpen
+            ? "pointer-events-auto opacity-100"
+            : "pointer-events-none opacity-0"
+        }`}
+        onClick={closeRecommendationsSidebar}
+        aria-hidden="true"
+      />
+
+      <aside
+        id="recommendations-sidebar"
+        className={`fixed inset-y-0 left-0 z-50 flex w-full max-w-sm flex-col border-r border-white/8 bg-[linear-gradient(180deg,rgba(12,19,31,0.98),rgba(8,13,22,0.99))] p-5 shadow-[0_24px_90px_rgba(0,0,0,0.42)] transition-transform duration-300 ease-out ${
+          isRecommendationsSidebarOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+        aria-hidden={!isRecommendationsSidebarOpen}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#74cbff]">
+              Recommendation chats
+            </p>
+            <h1 className="mt-2 text-2xl font-semibold text-white">
+              Tune your next watch
+            </h1>
+          </div>
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={handleCreateConversation}
@@ -161,49 +187,59 @@ export default function RecommendationsPage() {
             >
               <Plus className="h-5 w-5" />
             </button>
+            <button
+              type="button"
+              onClick={closeRecommendationsSidebar}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/12 bg-white/4 text-slate-300 transition hover:border-white/20 hover:bg-white/8 hover:text-white"
+              aria-label="Close recommendation chats"
+            >
+              <X className="h-5 w-5" />
+            </button>
           </div>
+        </div>
 
-          <div className="mt-6 space-y-3">
-            {conversationsLoading ? (
-              <div className="rounded-2xl border border-white/8 bg-white/4 p-4 text-sm text-slate-300">
-                Loading conversations...
-              </div>
-            ) : conversations.length === 0 ? (
-              <div className="rounded-[1.7rem] border border-dashed border-white/12 bg-white/3 p-5 text-sm text-slate-300">
-                No recommendation chats yet. Start one to keep your anime suggestions organized.
-              </div>
-            ) : (
-              conversations.map((conversation) => {
-                const isActive = conversation.id === activeConversationId;
+        <div className="mt-6 space-y-3 overflow-y-auto pr-1">
+          {conversationsLoading ? (
+            <div className="rounded-2xl border border-white/8 bg-white/4 p-4 text-sm text-slate-300">
+              Loading conversations...
+            </div>
+          ) : conversations.length === 0 ? (
+            <div className="rounded-[1.7rem] border border-dashed border-white/12 bg-white/3 p-5 text-sm text-slate-300">
+              No recommendation chats yet. Start one to keep your anime suggestions organized.
+            </div>
+          ) : (
+            conversations.map((conversation) => {
+              const isActive = conversation.id === activeConversationId;
 
-                return (
-                  <button
-                    key={conversation.id}
-                    type="button"
-                    onClick={() => setActiveConversationId(conversation.id)}
-                    className={`w-full rounded-[1.5rem] border p-4 text-left transition ${
-                      isActive
-                        ? "border-[#3CB4FF]/35 bg-[#3CB4FF]/10 shadow-[0_10px_28px_rgba(60,180,255,0.12)]"
-                        : "border-white/8 bg-white/3 hover:border-white/12 hover:bg-white/5"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <p className="line-clamp-2 text-sm font-medium text-white">
-                        {conversation.title || UNTITLED_CONVERSATION_LABEL}
-                      </p>
-                      <MessageSquareText className="mt-0.5 h-4 w-4 shrink-0 text-[#7fd4ff]" />
-                    </div>
-                    <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
-                      <span>{conversation.message_count} messages</span>
-                      <span>{formatConversationTime(conversation.last_active_at)}</span>
-                    </div>
-                  </button>
-                );
-              })
-            )}
-          </div>
-        </aside>
+              return (
+                <button
+                  key={conversation.id}
+                  type="button"
+                  onClick={() => handleSelectConversation(conversation.id)}
+                  className={`w-full rounded-[1.5rem] border p-4 text-left transition ${
+                    isActive
+                      ? "border-[#3CB4FF]/35 bg-[#3CB4FF]/10 shadow-[0_10px_28px_rgba(60,180,255,0.12)]"
+                      : "border-white/8 bg-white/3 hover:border-white/12 hover:bg-white/5"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="line-clamp-2 text-sm font-medium text-white">
+                      {conversation.title || UNTITLED_CONVERSATION_LABEL}
+                    </p>
+                    <MessageSquareText className="mt-0.5 h-4 w-4 shrink-0 text-[#7fd4ff]" />
+                  </div>
+                  <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
+                    <span>{conversation.message_count} messages</span>
+                    <span>{formatConversationTime(conversation.last_active_at)}</span>
+                  </div>
+                </button>
+              );
+            })
+          )}
+        </div>
+      </aside>
 
+      <div className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-7xl flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-[#09111b]/95 shadow-[0_24px_90px_rgba(0,0,0,0.42)]">
         <section className="flex min-h-[70vh] flex-1 flex-col bg-[linear-gradient(180deg,rgba(9,17,27,0.96),rgba(7,12,20,0.98))]">
           <div className="border-b border-white/8 px-5 py-5 sm:px-8">
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#74cbff]">
