@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 # enums
 ChatSessionStatus = Literal["active", "expired"]
-ChatMessageRole = Literal["user", "agent"]
+ChatMessageRole = Literal["user", "assistant"]
 
 
 class ChatSession(BaseModel):

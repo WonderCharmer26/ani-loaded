@@ -116,7 +116,7 @@ async def test_get_recommendation_conversation_not_found_returns_404(
     assert response.status_code == 404
 
 
-async def test_send_recommendation_message_creates_agent_exchange(
+async def test_send_recommendation_message_creates_assistant_exchange(
     async_client, monkeypatch
 ):
     fake_user = make_fake_user()
@@ -125,9 +125,9 @@ async def test_send_recommendation_message_creates_agent_exchange(
         title="Looking for dark fantasy anime", message_count=2
     )
     user_message_row = make_chat_message_row(content="Looking for dark fantasy anime")
-    agent_message_row = make_chat_message_row(
+    assistant_message_row = make_chat_message_row(
         id="00000000-0000-0000-0000-000000000202",
-        role="agent",
+        role="assistant",
         content="Try Berserk and Claymore.",
     )
     builder = make_supabase_builder()
@@ -137,10 +137,10 @@ async def test_send_recommendation_message_creates_agent_exchange(
             make_supabase_response([user_message_row]),
             make_supabase_response([titled_session_row]),
             make_supabase_response([user_message_row]),
-            make_supabase_response([agent_message_row]),
+            make_supabase_response([assistant_message_row]),
             make_supabase_response([titled_session_row]),
             make_supabase_response(titled_session_row),
-            make_supabase_response([user_message_row, agent_message_row]),
+            make_supabase_response([user_message_row, assistant_message_row]),
         ]
     )
 
@@ -169,7 +169,7 @@ async def test_send_recommendation_message_creates_agent_exchange(
     assert response.status_code == 200
     assert body["title"] == "Looking for dark fantasy anime"
     assert body["message_count"] == 2
-    assert [message["role"] for message in body["messages"]] == ["user", "agent"]
+    assert [message["role"] for message in body["messages"]] == ["user", "assistant"]
     assert builder.update.call_args_list[0].args[0]["title"] == "Looking for dark fantasy anime"
     assert builder.update.call_args_list[1].args[0]["message_count"] == 2
 
