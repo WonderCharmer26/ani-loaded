@@ -13,7 +13,7 @@ export const ChatSessionSchema = z.object({
   last_active_at: z.iso.datetime().optional(),
 });
 
-export const ChatMessageRoleSchema = z.enum(["user", "agent"]);
+export const ChatMessageRoleSchema = z.enum(["user", "assistant"]);
 
 export const ChatMessageSchema = z.object({
   id: z.uuid(),
