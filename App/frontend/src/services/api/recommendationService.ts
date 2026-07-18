@@ -23,7 +23,6 @@ const getAuthHeader = async (): Promise<{ Authorization: string }> => {
   }
 
   if (!token) {
-    toast.info("Please sign in to use recommendations");
     throw new Error("Missing auth token for recommendation request");
   }
 

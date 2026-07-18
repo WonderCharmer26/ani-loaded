@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Plus, MessageSquareText, X } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useOutletContext } from "react-router-dom";
+import { useNavigate, useOutletContext } from "react-router-dom";
 
 import RecommendationInput from "../components/RecommendationInput";
 import type { RootLayoutOutletContext } from "../layouts/RootLayout";
@@ -12,9 +12,11 @@ import {
   getRecommendationConversations,
   sendRecommendationMessage,
 } from "../services/api/recommendationService";
+import { useAuthContext } from "../services/supabase/hooks/AuthProvider";
 
 const UNTITLED_CONVERSATION_LABEL = "New recommendation chat";
 
+// formatting for conversation time shown in the chat
 function formatConversationTime(timestamp?: string) {
   if (!timestamp) {
     return "Just now";
@@ -30,24 +32,30 @@ function formatConversationTime(timestamp?: string) {
 
 export default function RecommendationsPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  // NOTE: MIGHT CHANGE THE RECOMMENDATION SIDEBAR IDEA TO REFINE THE UI
   const { isRecommendationsSidebarOpen, closeRecommendationsSidebar } =
     useOutletContext<RootLayoutOutletContext>();
-  const [activeConversationId, setActiveConversationId] = useState<string | null>(
-    null,
-  );
+  const { user, loading: authLoading } = useAuthContext();
+  const isAuthed = !authLoading && !!user; // helps with making sure the user is able to see this page
+  const [activeConversationId, setActiveConversationId] = useState<
+    string | null
+  >(null);
   const [draft, setDraft] = useState("");
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  const { data: conversations = [], isLoading: conversationsLoading } = useQuery({
-    queryKey: ["recommendationConversations"],
-    queryFn: getRecommendationConversations,
-  });
+  const { data: conversations = [], isLoading: conversationsLoading } =
+    useQuery({
+      queryKey: ["recommendationConversations"],
+      queryFn: getRecommendationConversations,
+      enabled: isAuthed,
+    });
 
   const { data: activeConversation, isLoading: activeConversationLoading } =
     useQuery({
       queryKey: ["recommendationConversation", activeConversationId],
       queryFn: () => getRecommendationConversation(activeConversationId!),
-      enabled: Boolean(activeConversationId),
+      enabled: isAuthed && Boolean(activeConversationId),
     });
 
   useEffect(() => {
@@ -69,6 +77,12 @@ export default function RecommendationsPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [activeConversation?.messages]);
 
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate("/auth/login", { replace: true });
+    }
+  }, [authLoading, user, navigate]);
+
   const createConversationMutation = useMutation({
     mutationFn: createRecommendationConversation,
     onSuccess: (session) => {
@@ -87,8 +101,13 @@ export default function RecommendationsPage() {
   });
 
   const sendMessageMutation = useMutation({
-    mutationFn: ({ sessionId, content }: { sessionId: string; content: string }) =>
-      sendRecommendationMessage(sessionId, content),
+    mutationFn: ({
+      sessionId,
+      content,
+    }: {
+      sessionId: string;
+      content: string;
+    }) => sendRecommendationMessage(sessionId, content),
     onSuccess: (conversation) => {
       queryClient.setQueryData(
         ["recommendationConversation", conversation.id],
@@ -120,6 +139,10 @@ export default function RecommendationsPage() {
   });
 
   const handleCreateConversation = async () => {
+    if (!isAuthed) {
+      return;
+    }
+
     try {
       await createConversationMutation.mutateAsync();
     } catch {
@@ -130,7 +153,7 @@ export default function RecommendationsPage() {
   const handleSubmit = async () => {
     const content = draft.trim();
 
-    if (!content || !activeConversationId) {
+    if (!isAuthed || !content || !activeConversationId) {
       return;
     }
 
@@ -148,6 +171,14 @@ export default function RecommendationsPage() {
     setActiveConversationId(conversationId);
     closeRecommendationsSidebar();
   };
+
+  if (!isAuthed) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top_left,rgba(60,180,255,0.08),transparent_28%),linear-gradient(180deg,#060a11,#0a1019)]">
+        <p className="text-slate-300">Loading...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(60,180,255,0.08),transparent_28%),linear-gradient(180deg,#060a11,#0a1019)] px-4 py-6 sm:px-6 lg:px-8">
@@ -205,7 +236,8 @@ export default function RecommendationsPage() {
             </div>
           ) : conversations.length === 0 ? (
             <div className="rounded-[1.7rem] border border-dashed border-white/12 bg-white/3 p-5 text-sm text-slate-300">
-              No recommendation chats yet. Start one to keep your anime suggestions organized.
+              No recommendation chats yet. Start one to keep your anime
+              suggestions organized.
             </div>
           ) : (
             conversations.map((conversation) => {
@@ -230,7 +262,9 @@ export default function RecommendationsPage() {
                   </div>
                   <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
                     <span>{conversation.message_count} messages</span>
-                    <span>{formatConversationTime(conversation.last_active_at)}</span>
+                    <span>
+                      {formatConversationTime(conversation.last_active_at)}
+                    </span>
                   </div>
                 </button>
               );
@@ -249,7 +283,8 @@ export default function RecommendationsPage() {
               {activeConversation?.title || UNTITLED_CONVERSATION_LABEL}
             </h2>
             <p className="mt-1 text-sm text-slate-400">
-              Ask for follow-ups, refinements, or a completely different vibe in a fresh chat.
+              Ask for follow-ups, refinements, or a completely different vibe in
+              a fresh chat.
             </p>
           </div>
 
@@ -264,7 +299,8 @@ export default function RecommendationsPage() {
                     Build a recommendation trail you can revisit
                   </h3>
                   <p className="mt-4 text-sm leading-7 text-slate-300">
-                    Create a recommendation chat, describe the mood you want, then keep refining without losing the earlier suggestions.
+                    Create a recommendation chat, describe the mood you want,
+                    then keep refining without losing the earlier suggestions.
                   </p>
                   <button
                     type="button"
@@ -297,7 +333,9 @@ export default function RecommendationsPage() {
                             : "border border-white/8 bg-white/5 text-slate-100"
                         }`}
                       >
-                        <p className={`mb-2 text-[0.7rem] font-semibold uppercase tracking-[0.22em] ${isUser ? "text-white/70" : "text-slate-400"}`}>
+                        <p
+                          className={`mb-2 text-[0.7rem] font-semibold uppercase tracking-[0.22em] ${isUser ? "text-white/70" : "text-slate-400"}`}
+                        >
                           {isUser ? "You" : "AniLoaded Agent"}
                         </p>
                         <p className="whitespace-pre-wrap">{message.content}</p>
@@ -316,7 +354,8 @@ export default function RecommendationsPage() {
               </div>
             ) : (
               <div className="flex h-full items-center justify-center rounded-[2rem] border border-dashed border-white/10 bg-white/3 px-6 text-center text-sm text-slate-300">
-                Send the first message in this chat to start building recommendation history.
+                Send the first message in this chat to start building
+                recommendation history.
               </div>
             )}
           </div>
@@ -327,7 +366,9 @@ export default function RecommendationsPage() {
               onChange={setDraft}
               onSubmit={handleSubmit}
               isPending={sendMessageMutation.isPending}
-              disabled={!activeConversationId || createConversationMutation.isPending}
+              disabled={
+                !activeConversationId || createConversationMutation.isPending
+              }
               placeholder="Describe what you want to watch next"
             />
           </div>

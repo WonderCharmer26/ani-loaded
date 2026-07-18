@@ -160,9 +160,7 @@ describe("recommendationService", () => {
       "Missing auth token for recommendation request",
     );
 
-    expect(toast.info).toHaveBeenCalledWith(
-      "Please sign in to use recommendations",
-    );
+    expect(toast.info).not.toHaveBeenCalled();
     expect(axios.post).not.toHaveBeenCalled();
   });
 });
