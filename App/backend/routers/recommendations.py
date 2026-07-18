@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Header
@@ -14,6 +15,7 @@ from schemas.recommendations import MatchedAnimeResponse
 from utilities.auth_validator import auth_validator
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class RecommendationMessageRequest(BaseModel):
@@ -28,8 +30,16 @@ def _generate_conversation_title(content: str) -> str:
     return f"{normalized_content[: max_length - 3].rstrip()}..."
 
 
-async def _get_session_for_user(session_id: UUID, user_id: str) -> ChatSession:
-    supabase = await get_supabase_client()
+def _preview_content(content: str, max_length: int = 120) -> str:
+    if len(content) <= max_length:
+        return content
+    return f"{content[: max_length - 3].rstrip()}..."
+
+
+async def _get_session_for_user(
+    session_id: UUID, user_id: str, authorization: str
+) -> ChatSession:
+    supabase = await get_supabase_client(authorization)
     try:
         response = await (
             supabase.table("chat_sessions")
@@ -41,7 +51,9 @@ async def _get_session_for_user(session_id: UUID, user_id: str) -> ChatSession:
         )
     except Exception as exc:
         if getattr(exc, "code", None) == "PGRST116":
-            raise HTTPException(status_code=404, detail="Conversation not found") from exc
+            raise HTTPException(
+                status_code=404, detail="Conversation not found"
+            ) from exc
         raise
 
     if not response.data:
@@ -50,8 +62,10 @@ async def _get_session_for_user(session_id: UUID, user_id: str) -> ChatSession:
     return ChatSession.model_validate(response.data)
 
 
-async def _get_session_messages(session_id: UUID) -> list[ChatMessage]:
-    supabase = await get_supabase_client()
+async def _get_session_messages(
+    session_id: UUID, authorization: str
+) -> list[ChatMessage]:
+    supabase = await get_supabase_client(authorization)
     response = await (
         supabase.table("chat_messages")
         .select("*")
@@ -63,19 +77,20 @@ async def _get_session_messages(session_id: UUID) -> list[ChatMessage]:
 
 
 async def _get_session_with_messages(
-    session_id: UUID, user_id: str
+    session_id: UUID, user_id: str, authorization: str
 ) -> ChatSessionWithMessages:
-    session = await _get_session_for_user(session_id, user_id)
-    messages = await _get_session_messages(session_id)
+    session = await _get_session_for_user(session_id, user_id, authorization)
+    messages = await _get_session_messages(session_id, authorization)
     return ChatSessionWithMessages(**session.model_dump(), messages=messages)
 
 
+# Returns the current user's recommendation chat sessions, newest activity first.
 @router.get("/recommendations/conversations", response_model=list[ChatSession])
 async def get_recommendation_conversations(
     authorization: str = Header(...),
 ):
     user: User = await auth_validator(authorization)
-    supabase = await get_supabase_client()
+    supabase = await get_supabase_client(authorization)
 
     try:
         response = await (
@@ -94,12 +109,13 @@ async def get_recommendation_conversations(
         ) from exc
 
 
+# Creates a new empty recommendation conversation for the authenticated user.
 @router.post("/recommendations/conversations", response_model=ChatSession)
 async def create_recommendation_conversation(
     authorization: str = Header(...),
 ):
     user: User = await auth_validator(authorization)
-    supabase = await get_supabase_client()
+    supabase = await get_supabase_client(authorization)
 
     try:
         response = await (
@@ -130,6 +146,7 @@ async def create_recommendation_conversation(
         ) from exc
 
 
+# Loads one recommendation conversation along with its full message history.
 @router.get(
     "/recommendations/conversations/{session_id}",
     response_model=ChatSessionWithMessages,
@@ -141,7 +158,9 @@ async def get_recommendation_conversation(
     user: User = await auth_validator(authorization)
 
     try:
-        return await _get_session_with_messages(session_id, str(user.id))
+        return await _get_session_with_messages(
+            session_id, str(user.id), authorization
+        )
     except HTTPException:
         raise
     except Exception as exc:
@@ -151,6 +170,7 @@ async def get_recommendation_conversation(
         ) from exc
 
 
+# Stores a user message, runs the recommendation agent, and returns the updated conversation.
 @router.post(
     "/recommendations/conversations/{session_id}/messages",
     response_model=ChatSessionWithMessages,
@@ -166,10 +186,29 @@ async def send_recommendation_message(
     if not content:
         raise HTTPException(status_code=400, detail="Message content is required")
 
-    session = await _get_session_for_user(session_id, str(user.id))
-    supabase = await get_supabase_client()
+    session = await _get_session_for_user(session_id, str(user.id), authorization)
+    supabase = await get_supabase_client(authorization)
+
+    pipeline_stage = "persist_user_message"
+    recent_messages: list[ChatMessage] = []
+    filtered_results: list[MatchedAnimeResponse] = []
 
     try:
+        auth_header = supabase.postgrest.session.headers.get("Authorization")
+        logger.info(
+            "Recommendation route Supabase auth check",
+            extra={
+                "pipeline_stage": pipeline_stage,
+                "session_id": str(session_id),
+                "user_id": str(user.id),
+                "has_authorization_header": bool(auth_header),
+                "authorization_preview": (
+                    f"{auth_header[:16]}...{auth_header[-6:]}" if auth_header else None
+                ),
+            },
+        )
+
+        # adds the chat message
         await (
             supabase.table("chat_messages")
             .insert(
@@ -182,6 +221,8 @@ async def send_recommendation_message(
             .execute()
         )
 
+        # create and add chat title if it doesn't exist
+        pipeline_stage = "update_session_title"
         if not session.title:
             await (
                 supabase.table("chat_sessions")
@@ -190,30 +231,37 @@ async def send_recommendation_message(
                 .execute()
             )
 
-        session_messages = await _get_session_messages(session_id)
+        # get recent session messages
+        pipeline_stage = "load_session_messages"
+        session_messages = await _get_session_messages(session_id, authorization)
         recent_messages = session_messages[-12:]
 
-        filtered_results: list[MatchedAnimeResponse] = await get_filtered_recommendations(
-            str(user.id), content
+        pipeline_stage = "filter_recommendations"
+        filtered_results = await get_filtered_recommendations(
+            str(user.id), content, authorization=authorization
         )
+
+        pipeline_stage = "run_recommendation_agent"
         response_text = await run_recommendation_agent(
             user_id=str(user.id),
             filtered_anime_suggestions=filtered_results,
             session_messages=recent_messages,
         )
 
+        pipeline_stage = "persist_assistant_message"
         await (
             supabase.table("chat_messages")
             .insert(
                 {
                     "session_id": str(session_id),
-                    "role": "agent",
+                    "role": "assistant",
                     "content": response_text,
                 }
             )
             .execute()
         )
 
+        pipeline_stage = "update_session_metadata"
         await (
             supabase.table("chat_sessions")
             .update(
@@ -226,10 +274,24 @@ async def send_recommendation_message(
             .execute()
         )
 
-        return await _get_session_with_messages(session_id, str(user.id))
+        pipeline_stage = "load_updated_conversation"
+        return await _get_session_with_messages(
+            session_id, str(user.id), authorization
+        )
     except HTTPException:
         raise
     except Exception as exc:
+        logger.exception(
+            "Recommendation message pipeline failed",
+            extra={
+                "pipeline_stage": pipeline_stage,
+                "session_id": str(session_id),
+                "user_id": str(user.id),
+                "message_preview": _preview_content(content),
+                "recent_message_count": len(recent_messages),
+                "filtered_result_count": len(filtered_results),
+            },
+        )
         raise HTTPException(
             status_code=500,
             detail="Recommendation agent failed",

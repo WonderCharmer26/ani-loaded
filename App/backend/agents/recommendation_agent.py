@@ -1,10 +1,14 @@
+import logging
+
 from langchain_openai import ChatOpenAI
 from langchain.agents import create_agent
 
 # tools that I made for searching for needed info
 from schemas.chat import ChatMessage
-from agents.tools import search_similar_anime, get_completed_watchlist
+from agents.tools import search_similar_anime
 from schemas.recommendations import MatchedAnimeResponse
+
+logger = logging.getLogger(__name__)
 
 # model that we'll use
 _llm = ChatOpenAI(
@@ -12,11 +16,9 @@ _llm = ChatOpenAI(
 )  # might tweak the temp in for a better creativity on the response from the agent
 
 # gonna add more tooling later on
-_tools = [search_similar_anime, get_completed_watchlist]
+_tools = [search_similar_anime]
 
-# create_agent builds the LangGraph state machine that runs the agent loop:
-#   reason → call tool → observe result → reason again → ... → final answer
-# handles all the looping so we don't have to do it manually.
+# agent handles the looping and reasoning on how to handle the request from the user
 _agent = create_agent(model=_llm, tools=_tools)
 
 # TODO: Tweak the system prompt
@@ -53,22 +55,34 @@ async def run_recommendation_agent(
     """
 
     # add in a fuction to get the users username from the database and then add it in the system prompt
+    # might be able to get it from the supabase function that gets the user information
 
-    result = await _agent.ainvoke(
-        {
-            "messages": [
-                # System message sets the agent's behavior for this specific user
-                (
-                    "system",
-                    _SYSTEM_PROMPT.format(
-                        user_id=user_id,
-                        filtered_anime_suggestions=filtered_anime_suggestions,
+    try:
+        result = await _agent.ainvoke(
+            {
+                "messages": [
+                    # System message sets the agent's behavior for this specific user
+                    (
+                        "system",
+                        _SYSTEM_PROMPT.format(
+                            user_id=user_id,
+                            filtered_anime_suggestions=filtered_anime_suggestions,
+                        ),
                     ),
-                ),
-                *[(message.role, message.content) for message in session_messages],
-            ]
-        }
-    )
+                    *[(message.role, message.content) for message in session_messages],
+                ]
+            }
+        )
+    except Exception:
+        logger.exception(
+            "Recommendation agent invocation failed",
+            extra={
+                "user_id": user_id,
+                "session_message_count": len(session_messages),
+                "filtered_suggestion_count": len(filtered_anime_suggestions),
+            },
+        )
+        raise
 
     # return the last message for the agents last answer
     return result["messages"][-1].content
