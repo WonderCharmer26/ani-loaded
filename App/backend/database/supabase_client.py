@@ -23,6 +23,7 @@ def _mask_token(token: str) -> str:
     return f"{token[:8]}...{token[-4:]}"
 
 
+# help with tracking the auth state on requests when debugging
 def _log_client_auth_state(client: AsyncClient, context: str) -> None:
     auth_header = client.postgrest.session.headers.get("Authorization")
     api_key = client.postgrest.session.headers.get("apikey")
