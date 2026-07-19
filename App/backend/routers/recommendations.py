@@ -240,6 +240,18 @@ async def send_recommendation_message(
         filtered_results = await get_filtered_recommendations(
             str(user.id), content, authorization=authorization
         )
+        logger.info(
+            "Prepared filtered recommendation candidates",
+            extra={
+                "pipeline_stage": pipeline_stage,
+                "session_id": str(session_id),
+                "user_id": str(user.id),
+                "filtered_result_count": len(filtered_results),
+                "filtered_result_titles": [
+                    result.title for result in filtered_results[:5]
+                ],
+            },
+        )
 
         pipeline_stage = "run_recommendation_agent"
         response_text = await run_recommendation_agent(

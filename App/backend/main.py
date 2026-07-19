@@ -9,6 +9,8 @@ from dotenv import load_dotenv
 # load env before importing modules that read environment variables at import time
 load_dotenv()
 
+# ignore the linting error you may see for these, (figure out later)
+# better to avoid error with env before the run
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from routers.lists import router as list_router
@@ -16,6 +18,7 @@ from routers.anime import router as anime_router
 from routers.discussions import router as discussions_router
 from routers.health import router as health_router
 from routers.recommendations import router as recommendations_router
+
 
 class ContextFormatter(logging.Formatter):
     _base_keys = {
@@ -118,6 +121,7 @@ async def log_requests(request: Request, call_next):
     )
 
     return response
+
 
 # add CORS middleware to allow cross-origin requests
 app.add_middleware(

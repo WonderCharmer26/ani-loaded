@@ -38,7 +38,19 @@ async def search_similar_anime(
         ).execute()
 
         # validate each row
-        return [MatchedAnimeResponse.model_validate(row) for row in result.data or []]
+        validated_results = [
+            MatchedAnimeResponse.model_validate(row) for row in result.data or []
+        ]
+        logger.info(
+            "Anime similarity search completed",
+            extra={
+                "query_preview": query[:120],
+                "match_count": match_count,
+                "result_count": len(validated_results),
+                "result_titles": [result.title for result in validated_results[:5]],
+            },
+        )
+        return validated_results
     except Exception:
         logger.exception(
             "Anime similarity search failed",
@@ -99,7 +111,16 @@ async def get_completed_watchlist(
             .execute()
         )
 
-        return [row["anime_id"] for row in result.data]
+        completed_ids = [row["anime_id"] for row in result.data]
+        logger.info(
+            "Fetched completed watchlist ids",
+            extra={
+                "user_id": user_id,
+                "completed_count": len(completed_ids),
+                "completed_id_sample": completed_ids[:10],
+            },
+        )
+        return completed_ids
     except Exception:
         logger.exception(
             "Failed to fetch completed watchlist",
@@ -125,7 +146,23 @@ async def get_filtered_recommendations(
         completed_set = set(completed_ids)
 
         # return an anime_id's of the shows that aren't in the completed_set of anime
-        return [result for result in search_results if result.id not in completed_set]
+        filtered_results = [
+            result for result in search_results if result.id not in completed_set
+        ]
+        logger.info(
+            "Prepared filtered recommendations",
+            extra={
+                "user_id": user_id,
+                "query_preview": query[:120],
+                "raw_search_result_count": len(search_results),
+                "completed_watchlist_count": len(completed_ids),
+                "filtered_result_count": len(filtered_results),
+                "filtered_result_titles": [
+                    result.title for result in filtered_results[:5]
+                ],
+            },
+        )
+        return filtered_results
     except Exception:
         logger.exception(
             "Failed to prepare filtered recommendations",
