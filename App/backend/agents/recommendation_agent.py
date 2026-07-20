@@ -10,16 +10,18 @@ from schemas.recommendations import MatchedAnimeResponse
 
 logger = logging.getLogger(__name__)
 
-# model that we'll use
-_llm = ChatOpenAI(
-    model="gpt-4o", temperature=0
-)  # might tweak the temp in for a better creativity on the response from the agent
-
 # gonna add more tooling later on
 _tools = [search_similar_anime]
 
-# agent handles the looping and reasoning on how to handle the request from the user
-_agent = create_agent(model=_llm, tools=_tools)
+
+def get_llm() -> ChatOpenAI:
+    return ChatOpenAI(
+        model="gpt-4o", temperature=0
+    )  # might tweak the temp in for a better creativity on the response from the agent
+
+
+def get_recommendation_agent():
+    return create_agent(model=get_llm(), tools=_tools)
 
 # TODO: Tweak the system prompt
 _SYSTEM_PROMPT = """
@@ -58,7 +60,8 @@ async def run_recommendation_agent(
     # might be able to get it from the supabase function that gets the user information
 
     try:
-        result = await _agent.ainvoke(
+        agent = get_recommendation_agent()
+        result = await agent.ainvoke(
             {
                 "messages": [
                     # System message sets the agent's behavior for this specific user
