@@ -5,6 +5,7 @@
 - **Build:** `npm run build`
 - **Lint:** `eslint .`
 - **Test:** (No explicit test command in package.json, assuming component tests are run during build)
+- **Backend tests:** Use the backend virtualenv, e.g. `cd backend && ./venv/bin/pytest` or `cd backend && source venv/bin/activate && pytest`
 
 ## Code Style Guidelines
 

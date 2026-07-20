@@ -8,7 +8,13 @@ from database.supabase_client import get_supabase_client
 from schemas.recommendations import MatchedAnimeResponse
 
 logger = logging.getLogger(__name__)
-openai = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
+
+
+def get_openai_client() -> AsyncOpenAI:
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY must be set")
+    return AsyncOpenAI(api_key=api_key)
 
 # NOTE: THE FUNCTIONS IN THIS FILE CAN BE USED ACROSS THE APPLICATION WHERE NEEDED
 # NOTE: THESE FUNCTION ARE ALSO USED IN THE AGENT TOOLS TO BE ABLE TO HELP WITH THE RECOMMENDATIONS
@@ -20,6 +26,8 @@ async def search_similar_anime(
 ) -> list[MatchedAnimeResponse]:
 
     try:
+        openai = get_openai_client()
+
         # create the embedding from the users query
         embedding_response = await openai.embeddings.create(
             model="text-embedding-3-small",
@@ -92,6 +100,7 @@ async def get_users_whole_watchlist(
         raise
 
 
+# get the shows that the user has completed to help filter
 async def get_completed_watchlist(
     user_id: str, authorization: str | None = None
 ) -> list[int]:
@@ -112,6 +121,7 @@ async def get_completed_watchlist(
         )
 
         completed_ids = [row["anime_id"] for row in result.data]
+
         logger.info(
             "Fetched completed watchlist ids",
             extra={
@@ -129,6 +139,7 @@ async def get_completed_watchlist(
         raise
 
 
+# gets similar anime from supabase as well as the shows that the user watched as well and returns the filtered result
 async def get_filtered_recommendations(
     user_id: str,
     query: str,
