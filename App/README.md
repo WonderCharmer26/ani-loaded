@@ -1,5 +1,9 @@
 # AniLoaded
 
+## Start Here
+
+Read `CODEBASE_MAP.md` first for the architecture overview, file map, feature responsibilities, and quick project catch-up guide.
+
 ## Create your virtual environment
 
 python -m venv venv

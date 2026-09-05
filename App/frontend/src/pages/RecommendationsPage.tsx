@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { Plus, MessageSquareText, X } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useOutletContext } from "react-router-dom";
+import { toast } from "sonner";
 
 import RecommendationInput from "../components/RecommendationInput";
 import type { RootLayoutOutletContext } from "../layouts/RootLayout";
-import type { ChatSession } from "../schemas/zod/chatSchema";
+import type { ChatSession, ChatSessionWithMessages } from "../schemas/zod/chatSchema";
 import {
   createRecommendationConversation,
   getRecommendationConversation,
@@ -85,7 +86,11 @@ export default function RecommendationsPage() {
 
   const createConversationMutation = useMutation({
     mutationFn: createRecommendationConversation,
-    onSuccess: (session) => {
+    onSuccess: async (session) => {
+      await queryClient.cancelQueries({
+        queryKey: ["recommendationConversations"],
+      });
+
       queryClient.setQueryData<ChatSession[]>(
         ["recommendationConversations"],
         (current = []) => {
@@ -95,8 +100,28 @@ export default function RecommendationsPage() {
           return [session, ...current.filter((item) => item.id !== session.id)];
         },
       );
+
+      queryClient.setQueryData<ChatSessionWithMessages>(
+        ["recommendationConversation", session.id],
+        {
+          ...session,
+          messages: [],
+        },
+      );
+
       setActiveConversationId(session.id);
       closeRecommendationsSidebar();
+
+      await queryClient.invalidateQueries({
+        queryKey: ["recommendationConversations"],
+      });
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Unable to create recommendation chat",
+      );
     },
   });
 
