@@ -9,15 +9,14 @@ from schemas.recommendations import MatchedAnimeResponse
 
 logger = logging.getLogger(__name__)
 
+# TODO: REFACTOR THE FILE TO MOVE HELPER FUNCTIONS INTO ITS OWN FOLDER/FILE TO HELP WITH CODEBASE STRUCTURE
+
 
 def get_openai_client() -> AsyncOpenAI:
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY must be set")
     return AsyncOpenAI(api_key=api_key)
-
-# NOTE: THE FUNCTIONS IN THIS FILE CAN BE USED ACROSS THE APPLICATION WHERE NEEDED
-# NOTE: THESE FUNCTION ARE ALSO USED IN THE AGENT TOOLS TO BE ABLE TO HELP WITH THE RECOMMENDATIONS
 
 
 # get the users query for embedding, and match_count for amount to match default 10
@@ -40,6 +39,7 @@ async def search_similar_anime(
         # open the supabase client for my need
         supabase = await get_supabase_client()
 
+        # NOTE: have to look into the function or make another tool, function alone is not handling edge cases when testing
         # run the custom supabse rpc function passing the vector in and then getting the top 10 anime that match
         result = await supabase.rpc(
             "match_anime", {"query_embedding": query_vector, "match_count": match_count}

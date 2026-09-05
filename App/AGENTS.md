@@ -1,5 +1,9 @@
 # AGENTS.md
 
+## First Read for Context
+
+- Read `CODEBASE_MAP.md` first for project architecture, file responsibilities, feature map, and quick catch-up context before diving into individual files.
+
 ## Build/Lint/Test Commands
 
 - **Build:** `npm run build`
