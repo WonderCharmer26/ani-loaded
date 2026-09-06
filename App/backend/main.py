@@ -3,6 +3,7 @@ import logging
 import os
 import time
 import uuid
+from typing import ClassVar
 
 from dotenv import load_dotenv
 
@@ -13,15 +14,15 @@ load_dotenv()
 # better to avoid error with env before the run
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from routers.lists import router as list_router
 from routers.anime import router as anime_router
 from routers.discussions import router as discussions_router
 from routers.health import router as health_router
+from routers.lists import router as list_router
 from routers.recommendations import router as recommendations_router
 
 
 class ContextFormatter(logging.Formatter):
-    _base_keys = {
+    _base_keys: ClassVar[frozenset[str]] = frozenset({
         "args",
         "asctime",
         "created",
@@ -45,7 +46,7 @@ class ContextFormatter(logging.Formatter):
         "thread",
         "threadName",
         "taskName",
-    }
+    })
 
     def format(self, record: logging.LogRecord) -> str:
         base_message = super().format(record)
