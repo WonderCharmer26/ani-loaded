@@ -1,8 +1,11 @@
 from langchain_core.tools import tool
-
 from rag.rag_service import (
     get_completed_watchlist as rag_get_completed_watchlist,
+)
+from rag.rag_service import (
     get_users_whole_watchlist as rag_get_users_whole_watchlist,
+)
+from rag.rag_service import (
     search_similar_anime as rag_search_similar_anime,
 )
 from schemas.recommendations import MatchedAnimeResponse

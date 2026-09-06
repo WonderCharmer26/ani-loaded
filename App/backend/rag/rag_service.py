@@ -2,9 +2,8 @@ import asyncio
 import logging
 import os
 
-from openai import AsyncOpenAI
-
 from database.supabase_client import get_supabase_client
+from openai import AsyncOpenAI
 from schemas.recommendations import MatchedAnimeResponse
 
 logger = logging.getLogger(__name__)
@@ -21,7 +20,7 @@ def get_openai_client() -> AsyncOpenAI:
 
 # get the users query for embedding, and match_count for amount to match default 10
 async def search_similar_anime(
-    query: str, match_count: int = 10
+    query: str, match_count: int = 10, authorization: str | None = None
 ) -> list[MatchedAnimeResponse]:
 
     try:
@@ -37,7 +36,9 @@ async def search_similar_anime(
         query_vector = embedding_response.data[0].embedding
 
         # open the supabase client for my need
-        supabase = await get_supabase_client()
+        # Use the caller's JWT so Supabase evaluates the RPC/table access as
+        # the authenticated user instead of the shared anonymous client.
+        supabase = await get_supabase_client(authorization)
 
         # NOTE: have to look into the function or make another tool, function alone is not handling edge cases when testing
         # run the custom supabse rpc function passing the vector in and then getting the top 10 anime that match
@@ -65,6 +66,7 @@ async def search_similar_anime(
             extra={
                 "query_preview": query[:120],
                 "match_count": match_count,
+                "has_authorization": bool(authorization),
             },
         )
         raise
@@ -90,7 +92,7 @@ async def get_users_whole_watchlist(
 
         return [
             {"anime_id": row["anime_id"], "status": row["status"]}
-            for row in result.data
+            for row in result.data or []
         ]
     except Exception:
         logger.exception(
@@ -120,7 +122,7 @@ async def get_completed_watchlist(
             .execute()
         )
 
-        completed_ids = [row["anime_id"] for row in result.data]
+        completed_ids = [row["anime_id"] for row in result.data or []]
 
         logger.info(
             "Fetched completed watchlist ids",
@@ -149,7 +151,7 @@ async def get_filtered_recommendations(
     try:
         # run both queries concurrently (helps us with making sure that db calls stay fast)
         search_results, completed_ids = await asyncio.gather(
-            search_similar_anime(query, match_count),
+            search_similar_anime(query, match_count, authorization),
             get_completed_watchlist(user_id, authorization),
         )
 
