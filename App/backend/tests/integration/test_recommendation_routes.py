@@ -150,9 +150,10 @@ async def test_send_recommendation_message_creates_assistant_exchange(
     monkeypatch.setattr(
         "routers.recommendations.get_supabase_client", AsyncMock(return_value=builder)
     )
+    filtered_recommendations = AsyncMock(return_value=[])
     monkeypatch.setattr(
         "routers.recommendations.get_filtered_recommendations",
-        AsyncMock(return_value=[]),
+        filtered_recommendations,
     )
     monkeypatch.setattr(
         "routers.recommendations.run_recommendation_agent",
@@ -172,6 +173,11 @@ async def test_send_recommendation_message_creates_assistant_exchange(
     assert [message["role"] for message in body["messages"]] == ["user", "assistant"]
     assert builder.update.call_args_list[0].args[0]["title"] == "Looking for dark fantasy anime"
     assert builder.update.call_args_list[1].args[0]["message_count"] == 2
+    filtered_recommendations.assert_awaited_once_with(
+        str(fake_user.id),
+        "Looking for dark fantasy anime",
+        authorization="Bearer test-token",
+    )
 
 
 async def test_send_recommendation_message_rejects_blank_content(
