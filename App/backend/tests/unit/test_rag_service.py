@@ -54,6 +54,59 @@ async def test_search_similar_anime_uses_callers_jwt(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_search_similar_anime_closes_client_it_creates(monkeypatch):
+    openai = MagicMock()
+    openai.embeddings.create = AsyncMock(
+        return_value=SimpleNamespace(data=[SimpleNamespace(embedding=[0.1])])
+    )
+    supabase = MagicMock()
+    supabase.rpc.return_value.execute = AsyncMock(
+        return_value=SimpleNamespace(data=[_anime_row(1, "Test Anime")])
+    )
+    supabase.postgrest.aclose = AsyncMock()
+    supabase.storage.session.aclose = AsyncMock()
+    supabase.auth.close = AsyncMock()
+    supabase.realtime.close = AsyncMock()
+
+    monkeypatch.setattr("rag.rag_service.get_openai_client", lambda: openai)
+    monkeypatch.setattr(
+        "rag.rag_service.get_supabase_client", AsyncMock(return_value=supabase)
+    )
+
+    await search_similar_anime("test query", authorization="Bearer jwt")
+
+    supabase.postgrest.aclose.assert_awaited_once()
+    supabase.storage.session.aclose.assert_awaited_once()
+    supabase.auth.close.assert_awaited_once()
+    supabase.realtime.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_search_similar_anime_does_not_close_caller_client(monkeypatch):
+    openai = MagicMock()
+    openai.embeddings.create = AsyncMock(
+        return_value=SimpleNamespace(data=[SimpleNamespace(embedding=[0.1])])
+    )
+    supabase = MagicMock()
+    supabase.rpc.return_value.execute = AsyncMock(
+        return_value=SimpleNamespace(data=[_anime_row(1, "Test Anime")])
+    )
+    supabase.postgrest.aclose = AsyncMock()
+    supabase.storage.session.aclose = AsyncMock()
+    supabase.auth.close = AsyncMock()
+    supabase.realtime.close = AsyncMock()
+
+    monkeypatch.setattr("rag.rag_service.get_openai_client", lambda: openai)
+
+    await search_similar_anime("test query", supabase=supabase)
+
+    supabase.postgrest.aclose.assert_not_awaited()
+    supabase.storage.session.aclose.assert_not_awaited()
+    supabase.auth.close.assert_not_awaited()
+    supabase.realtime.close.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_search_similar_anime_validates_rpc_rows(monkeypatch):
     openai = MagicMock()
     openai.embeddings.create = AsyncMock(
