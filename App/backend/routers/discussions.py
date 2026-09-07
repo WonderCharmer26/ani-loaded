@@ -1,15 +1,17 @@
 import os
 import uuid
+from collections.abc import AsyncIterator
 from inspect import iscoroutinefunction
 
 from gotrue.types import User
 import httpx
 from dotenv import load_dotenv
-from fastapi import APIRouter, Body, File, Form, Header, Query, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Form, Header, Query, UploadFile
 from fastapi.exceptions import HTTPException
+from supabase import AsyncClient
 from starlette.concurrency import run_in_threadpool
 
-from database.supabase_client import get_supabase_client
+from database.supabase_client import close_supabase_client, get_supabase_client
 from schemas.discussions import DiscussionsResponse
 from schemas.discussions import (
     CommentRequest,
@@ -22,6 +24,16 @@ from utilities.fileFunctions import ext_from_filename
 
 # Api router
 router = APIRouter()
+
+
+async def get_authorized_supabase(
+    authorization: str = Header(...),
+) -> AsyncIterator[AsyncClient]:
+    client = await get_supabase_client(authorization)
+    try:
+        yield client
+    finally:
+        await close_supabase_client(client)
 
 # load in env
 load_dotenv()
@@ -250,12 +262,11 @@ async def post_new_discussion(
     episode_number: int | None = Form(None),  # optional params
     season_number: int | None = Form(None),  # optional params
     authorization: str = Header(...),  # required
+    supabase: AsyncClient = Depends(get_authorized_supabase),
 ):
 
     # check if the request has an authorized user handles errors
     user: User = await auth_validator(authorization)
-    supabase = await get_supabase_client(authorization)
-
     # account for negative anime
     if anime_id <= 0:
         raise HTTPException(
@@ -389,15 +400,17 @@ async def post_new_discussion(
 
 # Route to get the upvote status for a specific discussion for the current user
 @router.get("/discussions/{discussion_id}/upvote")
-async def get_upvote_status(discussion_id: str, authorization: str = Header(...)):
+async def get_upvote_status(
+    discussion_id: str,
+    authorization: str = Header(...),
+    supabase: AsyncClient = Depends(get_authorized_supabase),
+):
     """
     Returns whether the current user has upvoted a discussion.
     """
     user: User = await auth_validator(authorization)
 
     try:
-        supabase = await get_supabase_client(authorization)
-
         response = (
             await supabase.table("discussion_upvotes")
             .select("*")
@@ -414,7 +427,11 @@ async def get_upvote_status(discussion_id: str, authorization: str = Header(...)
 
 # Route to toggle an upvote on a discussion
 @router.post("/discussions/{discussion_id}/upvote")
-async def toggle_upvote(discussion_id: str, authorization: str = Header(...)):
+async def toggle_upvote(
+    discussion_id: str,
+    authorization: str = Header(...),
+    supabase: AsyncClient = Depends(get_authorized_supabase),
+):
     """
     Toggles an upvote on a discussion for the current user.
     Returns the new upvote state and updated count.
@@ -422,8 +439,6 @@ async def toggle_upvote(discussion_id: str, authorization: str = Header(...)):
     user: User = await auth_validator(authorization)
 
     try:
-        supabase = await get_supabase_client(authorization)
-
         result = await supabase.rpc(
             "toggle_discussion_upvote",
             {"p_discussion_id": discussion_id, "p_user_id": str(user.id)},
@@ -439,11 +454,10 @@ async def post_comment(
     discussion_id: str,
     comment: CommentRequest = Body(...),
     authorization: str = Header(...),
+    supabase: AsyncClient = Depends(get_authorized_supabase),
 ):
     """Submit a comment on a discussion"""
     user: User = await auth_validator(authorization)
-    supabase = await get_supabase_client(authorization)
-
     # validate body is not empty
     body = comment.body.strip()
     if not body:
@@ -496,12 +510,15 @@ async def post_comment(
 
 # Route to get comment upvote status for the current user
 @router.get("/comments/{comment_id}/upvote")
-async def get_comment_upvote_status(comment_id: str, authorization: str = Header(...)):
+async def get_comment_upvote_status(
+    comment_id: str,
+    authorization: str = Header(...),
+    supabase: AsyncClient = Depends(get_authorized_supabase),
+):
     """Returns whether the current user has upvoted a comment."""
     user: User = await auth_validator(authorization)
 
     try:
-        supabase = await get_supabase_client(authorization)
         response = (
             await supabase.table("comment_upvotes")
             .select("*")
@@ -518,12 +535,15 @@ async def get_comment_upvote_status(comment_id: str, authorization: str = Header
 
 # Route to toggle an upvote on a comment
 @router.post("/comments/{comment_id}/upvote")
-async def toggle_comment_upvote(comment_id: str, authorization: str = Header(...)):
+async def toggle_comment_upvote(
+    comment_id: str,
+    authorization: str = Header(...),
+    supabase: AsyncClient = Depends(get_authorized_supabase),
+):
     """Toggles an upvote on a comment for the current user."""
     user: User = await auth_validator(authorization)
 
     try:
-        supabase = await get_supabase_client(authorization)
         result = await supabase.rpc(
             "toggle_comment_upvote",
             {"p_comment_id": comment_id, "p_user_id": str(user.id)},
@@ -541,12 +561,12 @@ async def update_discussion(
     discussion_id: str,
     updates: DiscussionUpdateRequest = Body(...),
     authorization: str = Header(...),
+    supabase: AsyncClient = Depends(get_authorized_supabase),
 ):
     """Update a discussion (only by author)"""
     user: User = await auth_validator(authorization)
 
     try:
-        supabase = await get_supabase_client(authorization)
         # check that this user owns the discussion
         discussion = (
             await supabase.table("discussions")
@@ -597,12 +617,12 @@ async def update_discussion(
 async def delete_discussion(
     discussion_id: str,
     authorization: str = Header(...),
+    supabase: AsyncClient = Depends(get_authorized_supabase),
 ):
     """Delete a discussion (only by author)"""
     user: User = await auth_validator(authorization)
 
     try:
-        supabase = await get_supabase_client(authorization)
         # check that this user owns the discussion
         discussion = (
             await supabase.table("discussions")

@@ -1,11 +1,17 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from dotenv import load_dotenv
-from fastapi import APIRouter, Header
+from fastapi import APIRouter, Depends, Header
 from fastapi.exceptions import HTTPException
 from gotrue import Optional
 from gotrue.types import User
 from supabase import AsyncClient
 
-from database.supabase_client import get_supabase_client
+from database.supabase_client import (
+    close_supabase_client,
+    get_supabase_client,
+)
 
 from routers.discussions import validate_anime_exists
 from schemas.lists import (
@@ -31,6 +37,27 @@ from utilities.anilist_client import fetch_anilist_media_map
 
 # connect to the router
 router = APIRouter()
+
+
+async def get_authorized_supabase(
+    authorization: str = Header(...),
+) -> AsyncIterator[AsyncClient]:
+    client = await get_supabase_client(authorization)
+    try:
+        yield client
+    finally:
+        await close_supabase_client(client)
+
+
+@asynccontextmanager
+async def request_supabase_client(
+    authorization: str,
+) -> AsyncIterator[AsyncClient]:
+    client = await get_supabase_client(authorization)
+    try:
+        yield client
+    finally:
+        await close_supabase_client(client)
 
 # might load in variables
 load_dotenv()
@@ -115,30 +142,33 @@ async def normalize_owner_username(
 
 # display all users lists
 @router.get("/lists", response_model=list[UserListWithAllAnime])
-async def get_all_lists():
+async def get_all_lists(authorization: str = Header(...)):
+    # check if the user is validated
+    await auth_validator(authorization)
+
     # access the supabase table
     try:
-        supabase = await get_supabase_client()
-        # get the users_list and the user_list_entry that are public
-        res = await (
-            supabase.table("user_list")
-            .select("*, user_list_entry(*)")
-            .eq("visibility", "public")
-            .execute()
-        )
+        async with request_supabase_client(authorization) as supabase:
+            # get the users_list and the user_list_entry that are public
+            res = await (
+                supabase.table("user_list")
+                .select("*, user_list_entry(*)")
+                .eq("visibility", "public")
+                .execute()
+            )
 
-        if not res.data:
-            raise HTTPException(status_code=404, detail="No lists found")
+            if not res.data:
+                raise HTTPException(status_code=404, detail="No lists found")
 
-        rows_with_usernames = await normalize_owner_username(res.data, supabase)
-        hydrated = await attach_anime_to_list_entries(rows_with_usernames)
+            rows_with_usernames = await normalize_owner_username(res.data, supabase)
+            hydrated = await attach_anime_to_list_entries(rows_with_usernames)
 
-        # validate all the items in the list
-        validated_list = [
-            UserListWithAllAnime.model_validate(item) for item in hydrated
-        ]
+            # validate all the items in the list
+            validated_list = [
+                UserListWithAllAnime.model_validate(item) for item in hydrated
+            ]
 
-        return validated_list
+            return validated_list
 
     except Exception as e:
         raise HTTPException(
@@ -198,13 +228,15 @@ async def get_specific_list(list_id: str, authorization: Optional[str] = Header(
 
 @router.patch("/list/{list_id}", response_model=UserListSuccessMessage)
 async def change_specific_list(
-    list_id: str, payload: UserListUpdate, authorization: str = Header(...)
+    list_id: str,
+    payload: UserListUpdate,
+    authorization: str = Header(...),
+    supabase: AsyncClient = Depends(get_authorized_supabase),
 ):
     # check the token (handles raising errors)
     user: User = await auth_validator(authorization)
 
     try:
-        supabase = await get_supabase_client(authorization)
         # make the update if the owner_id and list_id matches
         await supabase.rpc(
             "update_list_and_entries",
@@ -227,12 +259,15 @@ async def change_specific_list(
 
 # route for deleting lists
 @router.delete("/list/{list_id}", response_model=UserListSuccessMessage)
-async def delete_specific_list(list_id: str, authorization: str = Header(...)):
+async def delete_specific_list(
+    list_id: str,
+    authorization: str = Header(...),
+    supabase: AsyncClient = Depends(get_authorized_supabase),
+):
     # authorize the user
     user: User = await auth_validator(authorization)
 
     try:
-        supabase = await get_supabase_client(authorization)
         res = await (
             supabase.table("user_list")
             .delete()
@@ -270,11 +305,11 @@ async def get_users_lists(authorization: str = Header(...)):
 @router.get("/watchlist")
 async def get_user_watch_list(
     authorization: str = Header(...),
+    supabase: AsyncClient = Depends(get_authorized_supabase),
 ) -> UserWatchlistListResponse:
     user: User = await auth_validator(authorization)
 
     try:
-        supabase = await get_supabase_client(authorization)
         res = await (
             supabase.table("user_watchlist")
             .select("user_id, anime_id, title, genres, status, created_at, updated_at")
@@ -292,12 +327,13 @@ async def get_user_watch_list(
 
 @router.get("/watchlist/{watched_id}")
 async def check_if_watched(
-    watched_id: int, authorization: str = Header(...)
+    watched_id: int,
+    authorization: str = Header(...),
+    supabase: AsyncClient = Depends(get_authorized_supabase),
 ) -> UserWatchlistExistsResponse:
     user: User = await auth_validator(authorization)
 
     try:
-        supabase = await get_supabase_client(authorization)
         res = await (
             supabase.table("user_watchlist")
             .select("user_id, anime_id, title, genres, status, created_at, updated_at")
@@ -324,6 +360,7 @@ async def add_to_watchlist(
     watched_id: int,
     payload: UserWatchlistRequest,
     authorization: str = Header(...),
+    supabase: AsyncClient = Depends(get_authorized_supabase),
 ) -> UserWatchlistSuccessMessage:
     if watched_id != payload.anime_id:
         raise HTTPException(
@@ -334,7 +371,6 @@ async def add_to_watchlist(
     user: User = await auth_validator(authorization)
 
     try:
-        supabase = await get_supabase_client(authorization)
         anime_payload = {
             "id": payload.anime_id,
         }
@@ -367,11 +403,11 @@ async def update_watchlist_status(
     watched_id: int,
     payload: UserWatchlistStatusUpdateRequest,
     authorization: str = Header(...),
+    supabase: AsyncClient = Depends(get_authorized_supabase),
 ) -> UserWatchlistSuccessMessage:
     user: User = await auth_validator(authorization)
 
     try:
-        supabase = await get_supabase_client(authorization)
         res = await (
             supabase.table("user_watchlist")
             .update({"status": payload.status})
@@ -392,12 +428,13 @@ async def update_watchlist_status(
 
 @router.delete("/watchlist/{watched_id}")
 async def remove_from_watchlist(
-    watched_id: int, authorization: str = Header(...)
+    watched_id: int,
+    authorization: str = Header(...),
+    supabase: AsyncClient = Depends(get_authorized_supabase),
 ) -> UserWatchlistSuccessMessage:
     user: User = await auth_validator(authorization)
 
     try:
-        supabase = await get_supabase_client(authorization)
         res = await (
             supabase.table("user_watchlist")
             .delete()
@@ -420,11 +457,11 @@ async def remove_from_watchlist(
 async def get_watchlist_status(
     anime_id: int,
     authorization: str = Header(...),
+    supabase: AsyncClient = Depends(get_authorized_supabase),
 ) -> UserWatchlistStatusResponse:
     user: User = await auth_validator(authorization)
 
     try:
-        supabase = await get_supabase_client(authorization)
         res = await (
             supabase.table("user_watchlist")
             .select("anime_id, status")
@@ -479,11 +516,10 @@ async def get_popular_lists():
 async def create_list(
     payload: UserListCreate,
     authorization: str = Header(...),
+    supabase: AsyncClient = Depends(get_authorized_supabase),
 ):
     # check if the user is validated (handles raising error) (gets back user obj)
     user: User = await auth_validator(authorization)
-    supabase = await get_supabase_client(authorization)
-
     # store the entries to break down
     entries = payload.entries
 
