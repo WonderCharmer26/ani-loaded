@@ -120,6 +120,7 @@ def make_comment_row(**overrides) -> dict:
         "parent_comment_id": None,
         "body": "A test comment.",
         "is_spoiler": False,
+        "upvote_count": 0,
         "created_at": "2024-01-01T00:00:00",
         "updated_at": "2024-01-01T00:00:00",
     }
@@ -218,6 +219,16 @@ def make_supabase_builder(execute_data=None):
     builder.execute = AsyncMock(return_value=make_supabase_response(execute_data))
     # storage is used in the discussions route for thumbnails
     builder.storage = MagicMock()
+    return builder
+
+
+def make_closeable_supabase_builder(execute_data=None):
+    """Return a fluent Supabase mock with awaitable client close methods."""
+    builder = make_supabase_builder(execute_data)
+    builder.postgrest.aclose = AsyncMock()
+    builder.storage.session.aclose = AsyncMock()
+    builder.auth.close = AsyncMock()
+    builder.realtime.close = AsyncMock()
     return builder
 
 

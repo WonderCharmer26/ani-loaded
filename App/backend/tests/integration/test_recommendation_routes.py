@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 from tests.helpers.mock_factories import (
     make_chat_message_row,
     make_chat_session_row,
+    make_closeable_supabase_builder,
     make_fake_user,
     make_supabase_builder,
     make_supabase_response,
@@ -104,9 +105,8 @@ async def test_get_recommendation_conversation_not_found_returns_404(
     monkeypatch.setattr(
         "routers.recommendations.auth_validator", AsyncMock(return_value=fake_user)
     )
-    monkeypatch.setattr(
-        "routers.recommendations.get_supabase_client", AsyncMock(return_value=builder)
-    )
+    get_client = AsyncMock(return_value=builder)
+    monkeypatch.setattr("routers.recommendations.get_supabase_client", get_client)
 
     response = await async_client.get(
         "/recommendations/conversations/00000000-0000-0000-0000-000000000101",
@@ -130,7 +130,7 @@ async def test_send_recommendation_message_creates_assistant_exchange(
         role="assistant",
         content="Try Berserk and Claymore.",
     )
-    builder = make_supabase_builder()
+    builder = make_closeable_supabase_builder()
     builder.execute = AsyncMock(
         side_effect=[
             make_supabase_response(session_row),
@@ -147,9 +147,8 @@ async def test_send_recommendation_message_creates_assistant_exchange(
     monkeypatch.setattr(
         "routers.recommendations.auth_validator", AsyncMock(return_value=fake_user)
     )
-    monkeypatch.setattr(
-        "routers.recommendations.get_supabase_client", AsyncMock(return_value=builder)
-    )
+    get_client = AsyncMock(return_value=builder)
+    monkeypatch.setattr("routers.recommendations.get_supabase_client", get_client)
     filtered_recommendations = AsyncMock(return_value=[])
     monkeypatch.setattr(
         "routers.recommendations.get_filtered_recommendations",
@@ -173,11 +172,16 @@ async def test_send_recommendation_message_creates_assistant_exchange(
     assert [message["role"] for message in body["messages"]] == ["user", "assistant"]
     assert builder.update.call_args_list[0].args[0]["title"] == "Looking for dark fantasy anime"
     assert builder.update.call_args_list[1].args[0]["message_count"] == 2
+    get_client.assert_awaited_once_with("Bearer test-token")
     filtered_recommendations.assert_awaited_once_with(
         str(fake_user.id),
         "Looking for dark fantasy anime",
-        authorization="Bearer test-token",
+        supabase=builder,
     )
+    builder.postgrest.aclose.assert_awaited_once()
+    builder.storage.session.aclose.assert_awaited_once()
+    builder.auth.close.assert_awaited_once()
+    builder.realtime.close.assert_awaited_once()
 
 
 async def test_send_recommendation_message_rejects_blank_content(
