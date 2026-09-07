@@ -2,8 +2,10 @@ import asyncio
 import logging
 import os
 
-from database.supabase_client import get_supabase_client
 from openai import AsyncOpenAI
+from supabase import AsyncClient
+
+from database.supabase_client import close_supabase_client, get_supabase_client
 from schemas.recommendations import MatchedAnimeResponse
 
 logger = logging.getLogger(__name__)
@@ -20,8 +22,12 @@ def get_openai_client() -> AsyncOpenAI:
 
 # get the users query for embedding, and match_count for amount to match default 10
 async def search_similar_anime(
-    query: str, match_count: int = 10, authorization: str | None = None
+    query: str,
+    match_count: int = 10,
+    authorization: str | None = None,
+    supabase: AsyncClient | None = None,
 ) -> list[MatchedAnimeResponse]:
+    created_supabase_client = False
 
     try:
         openai = get_openai_client()
@@ -38,7 +44,9 @@ async def search_similar_anime(
         # open the supabase client for my need
         # Use the caller's JWT so Supabase evaluates the RPC/table access as
         # the authenticated user instead of the shared anonymous client.
-        supabase = await get_supabase_client(authorization)
+        if supabase is None:
+            supabase = await get_supabase_client(authorization)
+            created_supabase_client = authorization is not None
 
         # NOTE: have to look into the function or make another tool, function alone is not handling edge cases when testing
         # run the custom supabse rpc function passing the vector in and then getting the top 10 anime that match
@@ -70,18 +78,26 @@ async def search_similar_anime(
             },
         )
         raise
+    finally:
+        if created_supabase_client and supabase is not None:
+            await close_supabase_client(supabase)
 
 
 async def get_users_whole_watchlist(
-    user_id: str, authorization: str | None = None
+    user_id: str,
+    authorization: str | None = None,
+    supabase: AsyncClient | None = None,
 ) -> list[dict]:
     """
     Fetch a list of anime IDs and statuses from the user's watchlist.
     Returns a list of AniList IDs and statuses.
     """
+    created_supabase_client = False
 
     try:
-        supabase = await get_supabase_client(authorization)
+        if supabase is None:
+            supabase = await get_supabase_client(authorization)
+            created_supabase_client = authorization is not None
 
         result = await (
             supabase.from_("user_watchlist")
@@ -100,19 +116,27 @@ async def get_users_whole_watchlist(
             extra={"user_id": user_id},
         )
         raise
+    finally:
+        if created_supabase_client and supabase is not None:
+            await close_supabase_client(supabase)
 
 
 # get the shows that the user has completed to help filter
 async def get_completed_watchlist(
-    user_id: str, authorization: str | None = None
+    user_id: str,
+    authorization: str | None = None,
+    supabase: AsyncClient | None = None,
 ) -> list[int]:
     """
     Fetch the list of anime IDs that the user has completed.
     Returns a list of AniList anime IDs.
     """
+    created_supabase_client = False
 
     try:
-        supabase = await get_supabase_client(authorization)
+        if supabase is None:
+            supabase = await get_supabase_client(authorization)
+            created_supabase_client = authorization is not None
 
         result = await (
             supabase.table("user_watchlist")
@@ -139,6 +163,9 @@ async def get_completed_watchlist(
             extra={"user_id": user_id},
         )
         raise
+    finally:
+        if created_supabase_client and supabase is not None:
+            await close_supabase_client(supabase)
 
 
 # gets similar anime from supabase as well as the shows that the user watched as well and returns the filtered result
@@ -147,12 +174,19 @@ async def get_filtered_recommendations(
     query: str,
     match_count: int = 10,
     authorization: str | None = None,
+    supabase: AsyncClient | None = None,
 ) -> list[MatchedAnimeResponse]:
     try:
         # run both queries concurrently (helps us with making sure that db calls stay fast)
+        search_args = (query, match_count, authorization)
+        completed_args = (user_id, authorization)
+        if supabase is not None:
+            search_args += (supabase,)
+            completed_args += (supabase,)
+
         search_results, completed_ids = await asyncio.gather(
-            search_similar_anime(query, match_count, authorization),
-            get_completed_watchlist(user_id, authorization),
+            search_similar_anime(*search_args),
+            get_completed_watchlist(*completed_args),
         )
 
         # filter out dupes
