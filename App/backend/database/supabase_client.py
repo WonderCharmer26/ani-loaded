@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import logging
 import os
 
@@ -42,6 +43,27 @@ async def _create_client() -> AsyncClient:
     if not url or not key:
         raise RuntimeError("SUPABASE_URL and SUPABASE_KEY must be set")
     return await acreate_client(url, key)
+
+
+async def close_supabase_client(client: AsyncClient) -> None:
+    close_operations = (
+        client.postgrest.aclose,
+        client.storage.session.aclose,
+        client.auth.close,
+        client.realtime.close,
+    )
+    for close_operation in close_operations:
+        result = close_operation()
+        if inspect.isawaitable(result):
+            await result
+
+
+async def close_shared_supabase_client() -> None:
+    global _supabase
+
+    if _supabase is not None:
+        await close_supabase_client(_supabase)
+        _supabase = None
 
 
 # async function to handle getting the supabase connection when needed

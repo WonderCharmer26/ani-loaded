@@ -3,6 +3,7 @@ import logging
 import os
 import time
 import uuid
+from contextlib import asynccontextmanager
 from typing import ClassVar
 
 from dotenv import load_dotenv
@@ -14,6 +15,7 @@ load_dotenv()
 # better to avoid error with env before the run
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from database.supabase_client import close_shared_supabase_client
 from routers.anime import router as anime_router
 from routers.discussions import router as discussions_router
 from routers.health import router as health_router
@@ -74,8 +76,14 @@ logger = logging.getLogger(__name__)
 
 logger.info("Starting AniLoaded backend")
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    await close_shared_supabase_client()
+
 # create the app object
-app = FastAPI()
+app = FastAPI(lifespan=lifespan)
 
 
 @app.middleware("http")
