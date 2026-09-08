@@ -13,9 +13,9 @@ load_dotenv()
 
 # ignore the linting error you may see for these, (figure out later)
 # better to avoid error with env before the run
+from database.supabase_client import close_shared_supabase_client
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from database.supabase_client import close_shared_supabase_client
 from routers.anime import router as anime_router
 from routers.discussions import router as discussions_router
 from routers.health import router as health_router
@@ -23,33 +23,37 @@ from routers.lists import router as list_router
 from routers.recommendations import router as recommendations_router
 
 
+# class to help w/ formatting the logs that we get back so we can tell what is what
 class ContextFormatter(logging.Formatter):
-    _base_keys: ClassVar[frozenset[str]] = frozenset({
-        "args",
-        "asctime",
-        "created",
-        "exc_info",
-        "exc_text",
-        "filename",
-        "funcName",
-        "levelname",
-        "levelno",
-        "lineno",
-        "module",
-        "msecs",
-        "message",
-        "msg",
-        "name",
-        "pathname",
-        "process",
-        "processName",
-        "relativeCreated",
-        "stack_info",
-        "thread",
-        "threadName",
-        "taskName",
-    })
+    _base_keys: ClassVar[frozenset[str]] = frozenset(
+        {
+            "args",
+            "asctime",
+            "created",
+            "exc_info",
+            "exc_text",
+            "filename",
+            "funcName",
+            "levelname",
+            "levelno",
+            "lineno",
+            "module",
+            "msecs",
+            "message",
+            "msg",
+            "name",
+            "pathname",
+            "process",
+            "processName",
+            "relativeCreated",
+            "stack_info",
+            "thread",
+            "threadName",
+            "taskName",
+        }
+    )
 
+    # function to handle formatting
     def format(self, record: logging.LogRecord) -> str:
         base_message = super().format(record)
         context = {
@@ -81,6 +85,7 @@ logger.info("Starting AniLoaded backend")
 async def lifespan(app: FastAPI):
     yield
     await close_shared_supabase_client()
+
 
 # create the app object
 app = FastAPI(lifespan=lifespan)
