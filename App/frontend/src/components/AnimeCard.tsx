@@ -4,7 +4,8 @@
 
 import { AniListMedia } from "../schemas/animeSchemas";
 import { Link } from "react-router-dom";
-import { Plus } from "lucide-react";
+import { Check, Plus } from "lucide-react";
+import { useWatchlistToggle } from "@/hooks/useWatchlistToggle";
 
 // showcases anime images and the title
 export const AnimeCard = ({
@@ -14,6 +15,8 @@ export const AnimeCard = ({
 }: {
   anime: AniListMedia;
 }) => {
+  const { isInWatchlist, isPending, toggleWatchlist } = useWatchlistToggle(anime);
+
   return (
     // NOTE:  Changed the route an absolute route so it always takes to the anime info page through the whole application
     <Link to={`/anime/${anime.id}`}>
@@ -32,7 +35,7 @@ export const AnimeCard = ({
             : ""}
         </div>
         {/*NOTE: HOVER STATE FOR THE ANIME CARDS */}
-        <div className="absolute opacity-0 bg-black/70 inset-0 transition-opacity duration-200 pointer-events-none group-hover:opacity-100">
+        <div className="absolute opacity-0 bg-black/70 inset-0 transition-opacity duration-200 group-hover:opacity-100">
           <div className="absolute opacity-0 group-hover:opacity-100 transition-all  flex flex-col gap-y-1 inset-x-0 p-4 ">
             <div className="">
               <p className="text-lg font-bold">{anime.title.english}</p>
@@ -53,9 +56,19 @@ export const AnimeCard = ({
           </div>
           {/* TODO: ADD MORE ICONS FOR HOVER STATE */}
           <div className="absolute bottom-2 left-4 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-            <div className="flex h-10 w-10 items-center justify-center bg-black/50 text-white">
-              <Plus size={25} />
-            </div>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                toggleWatchlist();
+              }}
+              disabled={isPending}
+              className="flex h-10 w-10 items-center justify-center bg-black/50 text-white disabled:opacity-60"
+              aria-label={isInWatchlist ? "Remove from watchlist" : "Add to watchlist"}
+            >
+              {isInWatchlist ? <Check size={25} /> : <Plus size={25} />}
+            </button>
           </div>
         </div>
       </div>

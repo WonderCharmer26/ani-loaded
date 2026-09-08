@@ -1,14 +1,18 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   signOutUser,
   updateUserMetadata,
   updateUserPassword,
 } from "../services/supabase/supabaseAuth";
-
-// supabases built in user class
+import { useQuery } from "@tanstack/react-query";
+import { getUserWatchlist } from "../services/api/userWatchlistService";
+import type { UserWatchlistResponse } from "../schemas/zod/userWatchlistSchema";
+import { getAnimeInfo } from "../services/api/fetchAnimes";
+import type { AniListMedia } from "../schemas/animeSchemas";
 import { useAuthContext } from "../services/supabase/hooks/AuthProvider";
 
 export default function UserProfilePage() {
+  // state for the user account
   const [activeTab, setActiveTab] = useState("overview");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -19,6 +23,8 @@ export default function UserProfilePage() {
   const [avatarModalOpen, setAvatarModalOpen] = useState(false);
   const [username, setUsername] = useState("");
   const [updatingUsername, setUpdatingUsername] = useState(false);
+  const [genreFilter, setGenreFilter] = useState("All");
+  const [statusFilter, setStatusFilter] = useState("All");
 
   // Read shared auth state from provider so every page uses the same source.
   const { user, loading, refreshUser } = useAuthContext();
@@ -28,7 +34,48 @@ export default function UserProfilePage() {
     setUsername(user?.user_metadata?.username || "");
   }, [user]);
 
+  // Fetch watchlist items lazily — only when the watchlist tab is active.
+  const { data: watchlistData, isLoading: watchlistLoading } = useQuery({
+    queryKey: ["userWatchlist"],
+    queryFn: getUserWatchlist,
+    enabled: activeTab === "watchlist" && !!user,
+  });
+  const watchlistItems: UserWatchlistResponse[] = watchlistData?.watchlist ?? [];
+
+  // Fetch full AniList data for every watchlist entry in parallel.
+  const watchlistIds = watchlistItems.map((item) => item.anime_id);
+  const { data: animeDataList, isLoading: animeLoading } = useQuery({
+    queryKey: ["watchlistAnimeData", watchlistIds],
+    queryFn: () => Promise.all(watchlistIds.map((id) => getAnimeInfo(id))),
+    enabled: watchlistIds.length > 0,
+  });
+
+  // Merge watchlist metadata with full anime info.
+  const mergedWatchlist = useMemo(() => {
+    if (!animeDataList) return [];
+    return watchlistItems
+      .map((item, i) => ({ item, anime: animeDataList[i] }))
+      .filter((e) => !!e.anime);
+  }, [watchlistItems, animeDataList]);
+
+  // Unique genres from the user's actual watchlist (for filter chips).
+  const watchlistGenres = useMemo(() => {
+    const all = mergedWatchlist.flatMap(({ anime }) => anime.genres ?? []);
+    return ["All", ...Array.from(new Set(all)).sort()];
+  }, [mergedWatchlist]);
+
+  const filteredWatchlist = useMemo(() => {
+    return mergedWatchlist.filter(({ item, anime }) => {
+      const genreMatch =
+        genreFilter === "All" || (anime.genres ?? []).includes(genreFilter);
+      const statusMatch =
+        statusFilter === "All" || item.status === statusFilter;
+      return genreMatch && statusMatch;
+    });
+  }, [mergedWatchlist, genreFilter, statusFilter]);
+
   // Predefined anime avatars
+  // TODO: Make profile pics and strore them in a bucket to be brought in for selection
   const avatarOptions = [
     "https://api.dicebear.com/7.x/avataaars/svg?seed=anime1",
     "https://api.dicebear.com/7.x/avataaars/svg?seed=anime2",
@@ -134,9 +181,7 @@ export default function UserProfilePage() {
       <div className="flex items-center justify-center min-h-screen">
         <div className="border border-slate-700 p-8 rounded-xl w-full max-w-md text-center space-y-4">
           <h1 className="text-2xl font-bold text-white">Not Logged In</h1>
-          <p className="text-slate-400">
-            Please log in to view your profile.
-          </p>
+          <p className="text-slate-400">Please log in to view your profile.</p>
           <a
             href="/auth/login"
             className="inline-block rounded-xl bg-[#0066a5] px-6 py-2.5 font-semibold text-white hover:opacity-90 transition-opacity"
@@ -148,189 +193,391 @@ export default function UserProfilePage() {
     );
   }
 
-  const displayName = user.user_metadata?.username || user.email;
+  // display name of the user , dont make email
+  const displayName = user.user_metadata?.username || "No Username";
   const avatarUrl =
     user.user_metadata?.avatar_url ||
     "https://api.dicebear.com/7.x/avataaars/svg?seed=default";
 
   return (
-    <div className="px-6 py-10 space-y-10">
-      <div className="max-w-4xl mx-auto space-y-8">
-        {/* Profile Header Banner */}
-        <section className="relative rounded-xl border border-slate-700 overflow-hidden">
-          {/* Banner background */}
-          <div className="h-32 bg-gradient-to-r from-[#0d3853] to-[#3CB4FF]" />
+    <div>
+      {/* Profile Header Banner — full viewport width */}
+      <section className="relative overflow-hidden" style={{ height: 400 }}>
+        {/* Deep navy hero background */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(135deg, #071824 0%, #0d3853 40%, #0a2e48 70%, #071824 100%)",
+          }}
+        />
+        {/* Overlay — fades the banner to the page bg at the bottom */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(180deg, rgba(16,17,20,0.08) 0%, rgba(16,17,20,0.45) 55%, rgba(16,17,20,0.94) 100%)",
+          }}
+        />
 
-          {/* Profile info overlapping the banner */}
-          <div className="px-6 pb-6">
-            <div className="flex flex-col sm:flex-row items-center sm:items-end gap-4 -mt-12">
-              <img
-                src={avatarUrl}
-                alt="Avatar"
-                className="w-24 h-24 rounded-full object-cover border-4 border-slate-900 cursor-pointer hover:opacity-80 transition-opacity"
-                onClick={() => setAvatarModalOpen(true)}
-              />
-              <div className="text-center sm:text-left sm:pb-1">
-                <h1 className="text-2xl font-bold text-white">{displayName}</h1>
-                <p className="text-sm text-slate-400">
-                  Member since{" "}
-                  {new Date(user.created_at).toLocaleDateString()}
-                </p>
-              </div>
-              <div className="sm:ml-auto flex gap-2 sm:pb-1">
-                <button
-                  type="button"
-                  onClick={() => setAvatarModalOpen(true)}
-                  className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm font-medium text-slate-300 hover:bg-slate-800 transition-colors"
-                >
-                  Change Avatar
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSignOut}
-                  className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-500 transition-colors"
-                >
-                  Sign Out
-                </button>
-              </div>
-            </div>
+        {/* Profile content pinned to bottom-left */}
+        <div
+          className="absolute flex items-end gap-6"
+          style={{ bottom: 32, left: 56 }}
+        >
+          {/* Avatar with cyan ring */}
+          <div
+            className="relative flex-shrink-0 cursor-pointer"
+            style={{
+              width: 116,
+              height: 116,
+              borderRadius: "50%",
+              border: "3px solid #3CB4FF",
+              boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+              overflow: "hidden",
+            }}
+            onClick={() => setAvatarModalOpen(true)}
+          >
+            <img
+              src={avatarUrl}
+              alt="Avatar"
+              className="w-full h-full object-cover hover:opacity-80 transition-opacity"
+            />
           </div>
-        </section>
 
-        {/* Tabs */}
-        <div className="flex gap-1 border-b border-slate-700">
-          {["overview", "settings"].map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setActiveTab(tab)}
-              className={`px-5 py-2.5 text-sm font-semibold capitalize transition-colors ${
-                activeTab === tab
-                  ? "text-[#3CB4FF] border-b-2 border-[#3CB4FF]"
-                  : "text-slate-400 hover:text-white"
-              }`}
+          {/* Name + subtitle + action buttons */}
+          {/* NOTE: USERNAME AND MEMEBER JOIN DATE */}
+          {/* TODO: MAKE SURE TO SHOW PREDIFED TITLES FOR USERS */}
+          <div className="flex flex-col items-start">
+            <h1
+              style={{
+                fontFamily: '"Inter", system-ui, sans-serif',
+                fontWeight: 700,
+                fontSize: 48,
+                letterSpacing: "-0.02em",
+                lineHeight: 1,
+                textShadow: "3px 4px 6px rgba(0,0,0,0.5)",
+                color: "#fff",
+                margin: 0,
+              }}
             >
-              {tab}
-            </button>
-          ))}
+              {displayName}
+            </h1>
+            <p
+              style={{
+                fontFamily: '"Hanken Grotesk", "Inter", sans-serif',
+                fontWeight: 600,
+                fontSize: 20,
+                color: "#fff",
+                marginTop: 7,
+                marginBottom: 0,
+                lineHeight: 1,
+                letterSpacing: "0.01em",
+                textShadow: "2px 3px 4px rgba(0,0,0,0.5)",
+              }}
+            >
+              Member since {new Date(user.created_at).toLocaleDateString()}
+            </p>
+            <div
+              className="flex items-center gap-2.5"
+              style={{ marginTop: 18 }}
+            >
+              <button
+                type="button"
+                onClick={() => setAvatarModalOpen(true)}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  cursor: "pointer",
+                  border: "1.5px solid rgba(255,255,255,0.15)",
+                  background: "rgb(9,9,9)",
+                  color: "#fff",
+                  fontFamily: '"Inter", sans-serif',
+                  fontWeight: 800,
+                  letterSpacing: "0.04em",
+                  fontSize: 14,
+                  padding: "10px 22px",
+                  borderRadius: 6,
+                  transition: "opacity 140ms",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.8")}
+                onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+              >
+                Change Avatar
+              </button>
+              <button
+                type="button"
+                onClick={handleSignOut}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  cursor: "pointer",
+                  border: "1.5px solid transparent",
+                  background: "#dc2626",
+                  color: "#fff",
+                  fontFamily: '"Inter", sans-serif',
+                  fontWeight: 800,
+                  letterSpacing: "0.04em",
+                  fontSize: 14,
+                  padding: "10px 22px",
+                  borderRadius: 6,
+                  transition: "opacity 140ms",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
+                onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+              >
+                Sign Out
+              </button>
+            </div>
+          </div>
         </div>
+      </section>
 
-        {/* Tab Content */}
-        {activeTab === "overview" && (
-          <div className="space-y-6">
-            {/* Account Information */}
-            <div className="rounded-xl border border-slate-700 p-6 space-y-5">
-              <h2 className="text-lg font-bold text-white">Account Information</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                <InfoField label="Username" value={user.user_metadata?.username || "Not set"} />
-                <InfoField label="Email" value={user.email || "N/A"} />
-                <InfoField label="Account Created" value={new Date(user.created_at).toLocaleDateString()} />
-                <InfoField
-                  label="Last Sign In"
-                  value={
-                    user.last_sign_in_at
-                      ? new Date(user.last_sign_in_at).toLocaleDateString()
-                      : "N/A"
-                  }
-                />
-              </div>
-            </div>
+      {/* Constrained page content */}
+      <div className="px-6 pt-8 pb-10">
+        <div className="max-w-4xl mx-auto space-y-8">
+          {/* Tabs */}
+          <div className="flex gap-1 border-b border-slate-700">
+            {["overview", "watchlist", "settings"].map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setActiveTab(tab)}
+                className={`px-5 py-2.5 text-sm font-semibold capitalize transition-colors ${
+                  activeTab === tab
+                    ? "text-[#3CB4FF] border-b-2 border-[#3CB4FF]"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                {tab}
+              </button>
+            ))}
           </div>
-        )}
 
-        {activeTab === "settings" && (
-          <div className="space-y-6">
-            {/* Status messages */}
-            {settingsError && (
-              <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
-                {settingsError}
+          {/* Tab Content */}
+          {activeTab === "overview" && (
+            <div className="space-y-6">
+              {/* Account Information */}
+              <div className="rounded-xl border border-slate-700 p-6 space-y-5">
+                <h2 className="text-lg font-bold text-white">
+                  Account Information
+                </h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                  <InfoField
+                    label="Username"
+                    value={user.user_metadata?.username || "Not set"}
+                  />
+                  <InfoField label="Email" value={user.email || "N/A"} />
+                  <InfoField
+                    label="Account Created"
+                    value={new Date(user.created_at).toLocaleDateString()}
+                  />
+                  <InfoField
+                    label="Last Sign In"
+                    value={
+                      user.last_sign_in_at
+                        ? new Date(user.last_sign_in_at).toLocaleDateString()
+                        : "N/A"
+                    }
+                  />
+                </div>
               </div>
-            )}
-            {settingsSuccess && (
-              <div className="rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-400">
-                {settingsSuccess}
+            </div>
+          )}
+
+          {activeTab === "watchlist" && (
+            <div className="space-y-5">
+              {/* Genre filter chips */}
+              <div className="flex flex-wrap gap-2">
+                {watchlistGenres.map((g) => (
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={() => setGenreFilter(g)}
+                    style={{
+                      padding: "7px 15px",
+                      borderRadius: 20,
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                      letterSpacing: "0.03em",
+                      textTransform: "uppercase",
+                      cursor: "pointer",
+                      transition: "all 120ms",
+                      border:
+                        genreFilter === g
+                          ? "1px solid #3CB4FF"
+                          : "1px solid rgba(255,255,255,0.15)",
+                      background:
+                        genreFilter === g
+                          ? "rgba(60,180,255,0.16)"
+                          : "transparent",
+                      color:
+                        genreFilter === g ? "#3CB4FF" : "rgba(168,168,168,1)",
+                    }}
+                  >
+                    {g}
+                  </button>
+                ))}
               </div>
-            )}
 
-            {/* Update Username */}
-            <div className="rounded-xl border border-slate-700 p-6 space-y-4">
-              <h2 className="text-lg font-bold text-white">Update Username</h2>
-              <form onSubmit={handleUpdateUsername} className="space-y-4">
-                <div>
-                  <label
-                    htmlFor="username"
-                    className="block text-sm font-semibold text-slate-200 mb-1"
+              {/* Status filter chips */}
+              <div className="flex flex-wrap gap-2">
+                {WATCHLIST_STATUSES.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setStatusFilter(s)}
+                    style={{
+                      padding: "7px 15px",
+                      borderRadius: 20,
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                      letterSpacing: "0.03em",
+                      textTransform: "uppercase",
+                      cursor: "pointer",
+                      transition: "all 120ms",
+                      border:
+                        statusFilter === s
+                          ? `1px solid ${STATUS_COLORS[s] ?? "#3CB4FF"}`
+                          : "1px solid rgba(255,255,255,0.15)",
+                      background:
+                        statusFilter === s
+                          ? (STATUS_BG[s] ?? "rgba(60,180,255,0.16)")
+                          : "transparent",
+                      color:
+                        statusFilter === s
+                          ? (STATUS_COLORS[s] ?? "#3CB4FF")
+                          : "rgba(168,168,168,1)",
+                    }}
                   >
-                    Username
-                  </label>
-                  <input
-                    type="text"
-                    id="username"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    required
-                    className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-slate-500 focus:outline-none"
-                    placeholder="Enter your username"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={updatingUsername}
-                  className="rounded-lg bg-[#0066a5] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 transition-opacity disabled:opacity-50"
-                >
-                  {updatingUsername ? "Updating..." : "Update Username"}
-                </button>
-              </form>
-            </div>
+                    {s === "All" ? "All Statuses" : STATUS_LABELS[s]}
+                  </button>
+                ))}
+              </div>
 
-            {/* Change Password */}
-            <div className="rounded-xl border border-slate-700 p-6 space-y-4">
-              <h2 className="text-lg font-bold text-white">Change Password</h2>
-              <form onSubmit={handleChangePassword} className="space-y-4">
-                <div>
-                  <label
-                    htmlFor="newPassword"
-                    className="block text-sm font-semibold text-slate-200 mb-1"
-                  >
-                    New Password
-                  </label>
-                  <input
-                    type="password"
-                    id="newPassword"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    required
-                    className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-slate-500 focus:outline-none"
-                    placeholder="Enter new password"
-                  />
+              {/* Grid */}
+              {watchlistLoading || animeLoading ? (
+                <p className="text-slate-400 text-sm py-10 text-center">
+                  Loading watchlist…
+                </p>
+              ) : filteredWatchlist.length === 0 ? (
+                <p className="text-slate-400 text-sm py-10 text-center">
+                  {mergedWatchlist.length === 0
+                    ? "Your watchlist is empty."
+                    : "No shows match this filter."}
+                </p>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                  {filteredWatchlist.map(({ anime, item }) => (
+                    <WatchlistCard
+                      key={item.anime_id}
+                      anime={anime}
+                      item={item}
+                    />
+                  ))}
                 </div>
-                <div>
-                  <label
-                    htmlFor="confirmPassword"
-                    className="block text-sm font-semibold text-slate-200 mb-1"
-                  >
-                    Confirm New Password
-                  </label>
-                  <input
-                    type="password"
-                    id="confirmPassword"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    required
-                    className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-slate-500 focus:outline-none"
-                    placeholder="Confirm new password"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  className="rounded-lg bg-[#0066a5] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 transition-opacity"
-                >
-                  Update Password
-                </button>
-              </form>
+              )}
             </div>
-          </div>
-        )}
+          )}
+
+          {activeTab === "settings" && (
+            <div className="space-y-6">
+              {/* Status messages */}
+              {settingsError && (
+                <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+                  {settingsError}
+                </div>
+              )}
+              {settingsSuccess && (
+                <div className="rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-400">
+                  {settingsSuccess}
+                </div>
+              )}
+
+              {/* Update Username */}
+              <div className="rounded-xl border border-slate-700 p-6 space-y-4">
+                <h2 className="text-lg font-bold text-white">
+                  Update Username
+                </h2>
+                <form onSubmit={handleUpdateUsername} className="space-y-4">
+                  <div>
+                    <label
+                      htmlFor="username"
+                      className="block text-sm font-semibold text-slate-200 mb-1"
+                    >
+                      Username
+                    </label>
+                    <input
+                      type="text"
+                      id="username"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      required
+                      className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-slate-500 focus:outline-none"
+                      placeholder="Enter your username"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={updatingUsername}
+                    className="rounded-lg bg-[#0066a5] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 transition-opacity disabled:opacity-50"
+                  >
+                    {updatingUsername ? "Updating..." : "Update Username"}
+                  </button>
+                </form>
+              </div>
+
+              {/* Change Password */}
+              <div className="rounded-xl border border-slate-700 p-6 space-y-4">
+                <h2 className="text-lg font-bold text-white">
+                  Change Password
+                </h2>
+                <form onSubmit={handleChangePassword} className="space-y-4">
+                  <div>
+                    <label
+                      htmlFor="newPassword"
+                      className="block text-sm font-semibold text-slate-200 mb-1"
+                    >
+                      New Password
+                    </label>
+                    <input
+                      type="password"
+                      id="newPassword"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      required
+                      className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-slate-500 focus:outline-none"
+                      placeholder="Enter new password"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="confirmPassword"
+                      className="block text-sm font-semibold text-slate-200 mb-1"
+                    >
+                      Confirm New Password
+                    </label>
+                    <input
+                      type="password"
+                      id="confirmPassword"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      required
+                      className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-slate-500 focus:outline-none"
+                      placeholder="Confirm new password"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-[#0066a5] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 transition-opacity"
+                  >
+                    Update Password
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Avatar Selection Modal */}
@@ -384,6 +631,113 @@ export default function UserProfilePage() {
   );
 }
 
+// ─── Watchlist status display helpers ────────────────────────────────────────
+
+const WATCHLIST_STATUSES = [
+  "All",
+  "plan_to_watch",
+  "watching",
+  "completed",
+  "on_hold",
+  "dropped",
+];
+
+const STATUS_LABELS: Record<string, string> = {
+  plan_to_watch: "Plan to Watch",
+  watching: "Watching",
+  completed: "Completed",
+  on_hold: "On Hold",
+  dropped: "Dropped",
+};
+
+const STATUS_COLORS: Record<string, string> = {
+  All: "#3CB4FF",
+  plan_to_watch: "#3CB4FF",
+  watching: "#22c55e",
+  completed: "#94a3b8",
+  on_hold: "#eab308",
+  dropped: "#ef4444",
+};
+
+const STATUS_BG: Record<string, string> = {
+  All: "rgba(60,180,255,0.16)",
+  plan_to_watch: "rgba(60,180,255,0.16)",
+  watching: "rgba(34,197,94,0.16)",
+  completed: "rgba(148,163,184,0.16)",
+  on_hold: "rgba(234,179,8,0.16)",
+  dropped: "rgba(239,68,68,0.16)",
+};
+
+// ─── WatchlistCard ────────────────────────────────────────────────────────────
+// Matches AnimeCard visually (cover image, hover overlay, score badge) but
+// fills its grid cell responsively and adds a watchlist-status badge.
+function WatchlistCard({
+  anime,
+  item,
+}: {
+  anime: AniListMedia;
+  item: UserWatchlistResponse;
+}) {
+  const title =
+    anime.title?.english ?? anime.title?.romaji ?? item.title;
+
+  return (
+    <a href={`/anime/${anime.id}`} style={{ textDecoration: "none" }}>
+      <div
+        className="group relative cursor-pointer rounded-2xl overflow-hidden"
+        style={{ aspectRatio: "4/7" }}
+      >
+        {/* Cover image */}
+        <img
+          src={anime.coverImage?.large ?? ""}
+          alt={title}
+          className="w-full h-full object-cover border-2 border-black rounded-2xl transition-transform duration-200 group-hover:scale-[1.025]"
+        />
+
+        {/* Status badge — top left */}
+        <div
+          className="absolute top-2 left-2 px-2 py-0.5 rounded font-bold"
+          style={{
+            background: "rgba(9,9,9,0.78)",
+            border: `1.5px solid ${STATUS_COLORS[item.status]}`,
+            color: STATUS_COLORS[item.status],
+            fontSize: 10,
+            letterSpacing: "0.05em",
+            backdropFilter: "blur(2px)",
+          }}
+        >
+          {STATUS_LABELS[item.status]}
+        </div>
+
+        {/* Hover overlay — matches AnimeCard style */}
+        <div className="absolute opacity-0 bg-black/70 inset-0 transition-opacity duration-200 pointer-events-none group-hover:opacity-100 rounded-2xl">
+          <div className="absolute inset-x-0 top-0 p-3 flex flex-col gap-1">
+            <p className="text-sm font-bold text-white leading-tight line-clamp-3">
+              {title}
+            </p>
+            {anime.episodes && (
+              <p className="text-xs text-slate-300">
+                Episodes: {anime.episodes}
+              </p>
+            )}
+            {anime.status && (
+              <p className="text-xs text-slate-300">{anime.status}</p>
+            )}
+          </div>
+          {anime.averageScore && (
+            <div className="absolute bottom-4 left-2">
+              <div className="flex h-11 w-11 items-center justify-center rounded-full border-4 border-[#3CB4FF] text-sm font-bold text-white bg-black/50">
+                {anime.averageScore}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </a>
+  );
+}
+
+// ─── InfoField ────────────────────────────────────────────────────────────────
 // small helper component for displaying read-only info fields
 function InfoField({ label, value }: { label: string; value: string }) {
   return (

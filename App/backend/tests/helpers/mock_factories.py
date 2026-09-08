@@ -120,6 +120,7 @@ def make_comment_row(**overrides) -> dict:
         "parent_comment_id": None,
         "body": "A test comment.",
         "is_spoiler": False,
+        "upvote_count": 0,
         "created_at": "2024-01-01T00:00:00",
         "updated_at": "2024-01-01T00:00:00",
     }
@@ -150,6 +151,33 @@ def make_list_row(**overrides) -> dict:
                 "anime": make_anilist_media_item(1),
             }
         ],
+    }
+    row.update(overrides)
+    return row
+
+
+def make_chat_session_row(**overrides) -> dict:
+    row = {
+        "id": "00000000-0000-0000-0000-000000000101",
+        "user_id": "00000000-0000-0000-0000-000000000003",
+        "title": None,
+        "status": "active",
+        "message_count": 0,
+        "reset_at": None,
+        "created_at": "2024-01-01T00:00:00",
+        "last_active_at": "2024-01-01T00:00:00",
+    }
+    row.update(overrides)
+    return row
+
+
+def make_chat_message_row(**overrides) -> dict:
+    row = {
+        "id": "00000000-0000-0000-0000-000000000201",
+        "session_id": "00000000-0000-0000-0000-000000000101",
+        "role": "user",
+        "content": "Looking for dark fantasy anime",
+        "created_at": "2024-01-01T00:00:00",
     }
     row.update(overrides)
     return row
@@ -191,6 +219,16 @@ def make_supabase_builder(execute_data=None):
     builder.execute = AsyncMock(return_value=make_supabase_response(execute_data))
     # storage is used in the discussions route for thumbnails
     builder.storage = MagicMock()
+    return builder
+
+
+def make_closeable_supabase_builder(execute_data=None):
+    """Return a fluent Supabase mock with awaitable client close methods."""
+    builder = make_supabase_builder(execute_data)
+    builder.postgrest.aclose = AsyncMock()
+    builder.storage.session.aclose = AsyncMock()
+    builder.auth.close = AsyncMock()
+    builder.realtime.close = AsyncMock()
     return builder
 
 

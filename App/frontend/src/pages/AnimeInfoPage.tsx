@@ -10,6 +10,7 @@ import { AnimeBannerSkeleton } from "../components/skeleton/AnimeBannerSkeleton"
 import { useEffect } from "react";
 import { sanitizeHtml } from "../utilities/htmlUtils";
 import { ApiServiceError } from "../components/ApiServiceError";
+import { useWatchlistToggle } from "../hooks/useWatchlistToggle";
 
 // TODO: USE ANILIST RECOMMENDATION EDGE TO HELP WITH GIVING RECOMMENDATIONS FOR EACH OF THE DIFFERENT ANIME ON THE INFO PAGE
 
@@ -52,6 +53,15 @@ export default function AnimeInfoPage() {
   // builds and array of anime
   const featuredAnime = Array.isArray(trendingAnime) ? trendingAnime : [];
 
+  const watchlistToggle = useWatchlistToggle(
+    data ?? {
+      id: anime_id,
+      title: {},
+      coverImage: {},
+      genres: [],
+    },
+  );
+
   // handle case when the anime id isn't valid
   if (!isValidAnimeId) {
     return <p>Invalid anime ID</p>;
@@ -91,7 +101,14 @@ export default function AnimeInfoPage() {
   return (
     <div>
       {/* if the data is fetched correctly display the information for the page */}
-      {isFetched && data && <AnimeBanner anime={data} />}
+      {isFetched && data && (
+        <AnimeBanner
+          anime={data}
+          isInWatchlist={watchlistToggle.isInWatchlist}
+          isPending={watchlistToggle.isPending}
+          onToggleWatchlist={watchlistToggle.toggleWatchlist}
+        />
+      )}
       {/* TODO: make a style for if there is no bannerImage */}
       {/* NOTE: THIS IS THE MIDDLE SECTION */}
       <div className="mt-10 flex flex-row gap-4">
