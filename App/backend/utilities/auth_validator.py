@@ -1,11 +1,12 @@
-from fastapi import HTTPException, Header
 from typing import Any
 
 from database.supabase_client import get_supabase_client
+from fastapi import Header, HTTPException
 
 
 # helper function to help us to check auth
 async def auth_validator(authorization: str = Header(...)):
+    """Validates that the person sending the request is a valid user"""
     if not authorization:
         raise HTTPException(status_code=401, detail="Missing authorization header")
 
