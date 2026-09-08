@@ -53,6 +53,15 @@ export default function AnimeInfoPage() {
   // builds and array of anime
   const featuredAnime = Array.isArray(trendingAnime) ? trendingAnime : [];
 
+  const watchlistToggle = useWatchlistToggle(
+    data ?? {
+      id: anime_id,
+      title: {},
+      coverImage: {},
+      genres: [],
+    },
+  );
+
   // handle case when the anime id isn't valid
   if (!isValidAnimeId) {
     return <p>Invalid anime ID</p>;
@@ -82,15 +91,6 @@ export default function AnimeInfoPage() {
       />
     );
   }
-
-  const watchlistToggle = useWatchlistToggle(
-    data ?? {
-      id: anime_id,
-      title: {},
-      coverImage: {},
-      genres: [],
-    },
-  );
 
   // skeleton to show for the banner
   if (isLoading) {

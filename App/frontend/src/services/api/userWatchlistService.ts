@@ -103,6 +103,9 @@ export const getWatchlistStatus = async (
 export const getUserWatchlistByUserId = async (
   userId: string,
 ): Promise<UserWatchlistListResponse> => {
-  const response = await axios.get(`${backendUrl}/users/${userId}/watchlist`);
+  const headers = await getAuthHeader();
+  const response = await axios.get(`${backendUrl}/users/${userId}/watchlist`, {
+    headers,
+  });
   return UserWatchlistListResponseSchema.parse(response.data);
 };

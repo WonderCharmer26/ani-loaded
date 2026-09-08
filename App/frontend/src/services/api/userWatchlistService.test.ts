@@ -4,6 +4,7 @@ import { ZodError } from "zod";
 
 import {
   addToWatchlist,
+  getUserWatchlistByUserId,
   getWatchlistStatus,
   updateWatchlistStatus,
 } from "./userWatchlistService";
@@ -82,5 +83,33 @@ describe("userWatchlistService", () => {
     } as never);
 
     await expect(getWatchlistStatus(1)).rejects.toBeInstanceOf(ZodError);
+  });
+
+  it("sends auth header when fetching a user watchlist by user id", async () => {
+    vi.mocked(supabase.auth.getSession).mockResolvedValueOnce({
+      data: { session: { access_token: "token-123" } },
+    } as never);
+    vi.mocked(axios.get).mockResolvedValueOnce({
+      data: {
+        watchlist: [
+          {
+            user_id: "user-1",
+            anime_id: 1,
+            title: "Test Anime",
+            genres: ["Action"],
+            status: "watching",
+            created_at: "2024-01-01T00:00:00Z",
+            updated_at: "2024-01-01T00:00:00Z",
+          },
+        ],
+      },
+    } as never);
+
+    await getUserWatchlistByUserId("user-1");
+
+    expect(axios.get).toHaveBeenCalledWith(
+      "https://api.test/users/user-1/watchlist",
+      { headers: { Authorization: "Bearer token-123" } },
+    );
   });
 });

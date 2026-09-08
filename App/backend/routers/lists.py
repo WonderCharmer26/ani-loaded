@@ -1,26 +1,22 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+from database.supabase_client import (
+    close_supabase_client,
+    get_supabase_client,
+)
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, Header
 from fastapi.exceptions import HTTPException
 from gotrue import Optional
 from gotrue.types import User
-from supabase import AsyncClient
-
-from database.supabase_client import (
-    close_supabase_client,
-    get_supabase_client,
-)
-
-from routers.discussions import validate_anime_exists
 from schemas.lists import (
+    SpecificUserListWithAnime,
     UserListCreate,
+    UserListResponseWrapper,
     UserListSuccessMessage,
     UserListUpdate,
     UserListWithAllAnime,
-    UserListResponseWrapper,
-    SpecificUserListWithAnime,
 )
 from schemas.watchlist import (
     UserWatchlistExistsResponse,
@@ -31,9 +27,11 @@ from schemas.watchlist import (
     UserWatchlistStatusUpdateRequest,
     UserWatchlistSuccessMessage,
 )
-from utilities.auth_validator import auth_validator
+from supabase import AsyncClient
 from utilities.anilist_client import fetch_anilist_media_map
+from utilities.auth_validator import auth_validator
 
+from routers.discussions import validate_anime_exists
 
 # connect to the router
 router = APIRouter()
@@ -58,6 +56,7 @@ async def request_supabase_client(
         yield client
     finally:
         await close_supabase_client(client)
+
 
 # might load in variables
 load_dotenv()
@@ -317,7 +316,9 @@ async def get_user_watch_list(
             .execute()
         )
 
-        validated = [UserWatchlistResponse.model_validate(item) for item in res.data or []]
+        validated = [
+            UserWatchlistResponse.model_validate(item) for item in res.data or []
+        ]
         return {"watchlist": validated}
     except HTTPException:
         raise
@@ -352,7 +353,9 @@ async def check_if_watched(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to check watchlist item: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to check watchlist item: {e}"
+        )
 
 
 @router.post("/watchlist/{watched_id}")
@@ -395,7 +398,9 @@ async def add_to_watchlist(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to add watchlist item: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to add watchlist item: {e}"
+        )
 
 
 @router.patch("/watchlist/{watched_id}")
@@ -423,7 +428,9 @@ async def update_watchlist_status(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to update watchlist item: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to update watchlist item: {e}"
+        )
 
 
 @router.delete("/watchlist/{watched_id}")
@@ -450,7 +457,9 @@ async def remove_from_watchlist(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to remove watchlist item: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to remove watchlist item: {e}"
+        )
 
 
 @router.get("/watchlist/status/{anime_id}")
@@ -482,21 +491,35 @@ async def get_watchlist_status(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch watchlist status: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch watchlist status: {e}"
+        )
 
 
 @router.get("/users/{user_id}/watchlist")
-async def get_user_watchlist_by_user_id(user_id: str) -> UserWatchlistListResponse:
+async def get_user_watchlist_by_user_id(
+    user_id: str,
+    authorization: str = Header(...),
+    supabase: AsyncClient = Depends(get_authorized_supabase),
+) -> UserWatchlistListResponse:
+    user: User = await auth_validator(authorization)
+
+    if user_id != str(user.id):
+        raise HTTPException(
+            status_code=403, detail="Cannot access another user's watchlist"
+        )
+
     try:
-        supabase = await get_supabase_client()
         res = await (
             supabase.table("user_watchlist")
             .select("user_id, anime_id, title, genres, status, created_at, updated_at")
-            .eq("user_id", user_id)
+            .eq("user_id", str(user.id))
             .execute()
         )
 
-        validated = [UserWatchlistResponse.model_validate(item) for item in res.data or []]
+        validated = [
+            UserWatchlistResponse.model_validate(item) for item in res.data or []
+        ]
         return {"watchlist": validated}
     except HTTPException:
         raise
