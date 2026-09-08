@@ -1,20 +1,19 @@
-from datetime import datetime, timezone
 import logging
-from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from uuid import UUID
 
+from agents.recommendation_agent import run_recommendation_agent
+from database.supabase_client import close_supabase_client, get_supabase_client
 from fastapi import APIRouter, Header
 from fastapi.exceptions import HTTPException
 from gotrue.types import User
 from pydantic import BaseModel
-from supabase import AsyncClient
-
-from agents.recommendation_agent import run_recommendation_agent
-from database.supabase_client import close_supabase_client, get_supabase_client
 from rag.rag_service import get_filtered_recommendations
 from schemas.chat import ChatMessage, ChatSession, ChatSessionWithMessages
 from schemas.recommendations import MatchedAnimeResponse
+from supabase import AsyncClient
 from utilities.auth_validator import auth_validator
 
 router = APIRouter()
@@ -271,6 +270,7 @@ async def send_recommendation_message(
                 user_id=str(user.id),
                 filtered_anime_suggestions=filtered_results,
                 session_messages=recent_messages,
+                authorization=authorization,
             )
 
             pipeline_stage = "persist_assistant_message"
