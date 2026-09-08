@@ -1,16 +1,21 @@
 import logging
 
+from langchain.agents import AgentState, create_agent
 from langchain_openai import ChatOpenAI
-from langchain.agents import create_agent
 
 # tools that I made for searching for needed info
 from schemas.chat import ChatMessage
-from agents.tools import search_similar_anime
 from schemas.recommendations import MatchedAnimeResponse
+
+from agents.tools import search_similar_anime
 
 logger = logging.getLogger(__name__)
 
-# gonna add more tooling later on
+
+class RecommendationAgentState(AgentState):
+    authorization: str | None
+
+
 _tools = [search_similar_anime]
 
 
@@ -21,9 +26,13 @@ def get_llm() -> ChatOpenAI:
 
 
 def get_recommendation_agent():
-    return create_agent(model=get_llm(), tools=_tools)
+    return create_agent(
+        model=get_llm(), tools=_tools, state_schema=RecommendationAgentState
+    )
 
-# TODO: Tweak the system prompt
+
+# TODO: Tweak the system prompt might adjust later w/ after more testing
+# NOTE: I plan on passing the name of the user to the LLM instead of the user_id
 _SYSTEM_PROMPT = """
 You are an anime recommendation assistant for AniLoaded.
 
@@ -50,6 +59,7 @@ async def run_recommendation_agent(
     user_id: str,
     filtered_anime_suggestions: list[MatchedAnimeResponse],
     session_messages: list[ChatMessage],
+    authorization: str,
 ) -> str:
     """
     Takes the user's ID and their message, runs the full agent loop,
@@ -73,7 +83,8 @@ async def run_recommendation_agent(
                         ),
                     ),
                     *[(message.role, message.content) for message in session_messages],
-                ]
+                ],
+                "authorization": authorization,
             }
         )
     except Exception:

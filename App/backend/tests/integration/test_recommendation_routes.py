@@ -154,10 +154,8 @@ async def test_send_recommendation_message_creates_assistant_exchange(
         "routers.recommendations.get_filtered_recommendations",
         filtered_recommendations,
     )
-    monkeypatch.setattr(
-        "routers.recommendations.run_recommendation_agent",
-        AsyncMock(return_value="Try Berserk and Claymore."),
-    )
+    run_agent = AsyncMock(return_value="Try Berserk and Claymore.")
+    monkeypatch.setattr("routers.recommendations.run_recommendation_agent", run_agent)
 
     response = await async_client.post(
         f"/recommendations/conversations/{session_row['id']}/messages",
@@ -178,6 +176,7 @@ async def test_send_recommendation_message_creates_assistant_exchange(
         "Looking for dark fantasy anime",
         supabase=builder,
     )
+    assert run_agent.await_args.kwargs["authorization"] == "Bearer test-token"
     builder.postgrest.aclose.assert_awaited_once()
     builder.storage.session.aclose.assert_awaited_once()
     builder.auth.close.assert_awaited_once()
