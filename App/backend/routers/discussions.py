@@ -3,24 +3,22 @@ import uuid
 from collections.abc import AsyncIterator
 from inspect import iscoroutinefunction
 
-from gotrue.types import User
 import httpx
+from database.supabase_client import close_supabase_client, get_supabase_client
 from dotenv import load_dotenv
 from fastapi import APIRouter, Body, Depends, File, Form, Header, Query, UploadFile
 from fastapi.exceptions import HTTPException
-from supabase import AsyncClient
-from starlette.concurrency import run_in_threadpool
-
-from database.supabase_client import close_supabase_client, get_supabase_client
-from schemas.discussions import DiscussionsResponse
+from gotrue.types import User
 from schemas.discussions import (
     CommentRequest,
+    DiscussionsResponse,
     DiscussionUpdateRequest,
 )
+from starlette.concurrency import run_in_threadpool
+from supabase import AsyncClient
 from utilities.auth_validator import auth_validator
-from utilities.genreFunctions import ANILIST_URL
 from utilities.fileFunctions import ext_from_filename
-
+from utilities.genreFunctions import ANILIST_URL
 
 # Api router
 router = APIRouter()
@@ -34,6 +32,7 @@ async def get_authorized_supabase(
         yield client
     finally:
         await close_supabase_client(client)
+
 
 # load in env
 load_dotenv()
@@ -498,9 +497,12 @@ async def post_comment(
             .execute()
         )
         new_count = (discussion.data.get("comment_count", 0)) + 1
-        await supabase.table("discussions").update({"comment_count": new_count}).eq(
-            "id", discussion_id
-        ).execute()
+        await (
+            supabase.table("discussions")
+            .update({"comment_count": new_count})
+            .eq("id", discussion_id)
+            .execute()
+        )
     except Exception:
         # comment was already saved, don't fail the whole request
         pass
@@ -641,14 +643,20 @@ async def delete_discussion(
             )
 
         # delete comments first
-        await supabase.table("discussions_comments").delete().eq(
-            "discussion_id", discussion_id
-        ).execute()
+        await (
+            supabase.table("discussions_comments")
+            .delete()
+            .eq("discussion_id", discussion_id)
+            .execute()
+        )
 
         # delete upvotes
-        await supabase.table("discussion_upvotes").delete().eq(
-            "discussion_id", discussion_id
-        ).execute()
+        await (
+            supabase.table("discussion_upvotes")
+            .delete()
+            .eq("discussion_id", discussion_id)
+            .execute()
+        )
 
         # delete the discussion
         await supabase.table("discussions").delete().eq("id", discussion_id).execute()

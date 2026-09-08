@@ -58,6 +58,7 @@ async def close_supabase_client(client: AsyncClient) -> None:
             await result
 
 
+# function to help w/ handling closing the Supabase database connection
 async def close_shared_supabase_client() -> None:
     global _supabase
 
