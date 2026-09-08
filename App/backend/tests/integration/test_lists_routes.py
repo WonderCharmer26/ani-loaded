@@ -63,9 +63,8 @@ async def test_get_all_lists_returns_200(async_client, monkeypatch):
             ),
         ]
     )
-    monkeypatch.setattr(
-        "routers.lists.get_supabase_client", AsyncMock(return_value=builder)
-    )
+    get_client = AsyncMock(return_value=builder)
+    monkeypatch.setattr("routers.lists.get_supabase_client", get_client)
     monkeypatch.setattr(
         "routers.lists.fetch_anilist_media_map",
         AsyncMock(return_value={1: make_anilist_media_item(1)}),
@@ -80,9 +79,8 @@ async def test_get_all_lists_empty_returns_404(async_client, monkeypatch):
     monkeypatch.setattr(
         "routers.lists.auth_validator", AsyncMock(return_value=make_fake_user())
     )
-    monkeypatch.setattr(
-        "routers.lists.get_supabase_client", AsyncMock(return_value=builder)
-    )
+    get_client = AsyncMock(return_value=builder)
+    monkeypatch.setattr("routers.lists.get_supabase_client", get_client)
 
     response = await async_client.get("/lists", headers=_auth_headers())
     assert response.status_code == 404
@@ -404,6 +402,9 @@ async def test_get_watchlist_status_not_found_returns_null_status(async_client, 
 
 
 async def test_get_users_watchlist_returns_all_statuses(async_client, monkeypatch):
+    fake_user = make_fake_user(user_id="user-uuid-1")
+    monkeypatch.setattr("routers.lists.auth_validator", AsyncMock(return_value=fake_user))
+
     builder = make_supabase_builder(
         execute_data=[
             _watchlist_row(status="plan_to_watch"),
@@ -411,14 +412,37 @@ async def test_get_users_watchlist_returns_all_statuses(async_client, monkeypatc
             _watchlist_row(anime_id=3, status="on_hold"),
         ]
     )
-    monkeypatch.setattr(
-        "routers.lists.get_supabase_client", AsyncMock(return_value=builder)
-    )
+    get_client = AsyncMock(return_value=builder)
+    monkeypatch.setattr("routers.lists.get_supabase_client", get_client)
 
-    response = await async_client.get("/users/user-uuid-1/watchlist")
+    response = await async_client.get(
+        "/users/user-uuid-1/watchlist", headers=_auth_headers()
+    )
     assert response.status_code == 200
+    get_client.assert_awaited_once_with("Bearer test-token")
     statuses = [item["status"] for item in response.json()["watchlist"]]
     assert statuses == ["plan_to_watch", "completed", "on_hold"]
+
+
+async def test_get_users_watchlist_requires_auth(async_client):
+    response = await async_client.get("/users/user-uuid-1/watchlist")
+    assert response.status_code == 422
+
+
+async def test_get_users_watchlist_rejects_other_user(async_client, monkeypatch):
+    fake_user = make_fake_user(user_id="user-uuid-1")
+    builder = make_closeable_supabase_builder(execute_data=[])
+    monkeypatch.setattr("routers.lists.auth_validator", AsyncMock(return_value=fake_user))
+    get_client = AsyncMock(return_value=builder)
+    monkeypatch.setattr("routers.lists.get_supabase_client", get_client)
+
+    response = await async_client.get(
+        "/users/other-user/watchlist", headers=_auth_headers()
+    )
+
+    assert response.status_code == 403
+    get_client.assert_awaited_once_with("Bearer test-token")
+    builder.postgrest.aclose.assert_awaited_once()
 
 
 # ---------------------------------------------------------------------------
