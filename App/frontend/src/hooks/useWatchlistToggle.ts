@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import type { AniListMedia } from "@/schemas/animeSchemas";
+import type { UserWatchlistStatusResponse } from "@/schemas/zod/userWatchlistSchema";
 import { useAuthContext } from "@/services/supabase/hooks/AuthProvider";
 import {
   addToWatchlist,
@@ -47,7 +48,13 @@ export function useWatchlistToggle(anime: AniListMedia) {
     },
     onMutate: async (currentlyInWatchlist) => {
       await queryClient.cancelQueries({ queryKey: statusQueryKey });
-      const previousStatus = queryClient.getQueryData(statusQueryKey);
+      const previousStatus =
+        queryClient.getQueryData<UserWatchlistStatusResponse>(statusQueryKey);
+      const rollbackStatus: UserWatchlistStatusResponse = previousStatus ?? {
+        anime_id: anime.id,
+        in_watchlist: currentlyInWatchlist,
+        status: currentlyInWatchlist ? DEFAULT_WATCHLIST_STATUS : null,
+      };
 
       queryClient.setQueryData(statusQueryKey, {
         anime_id: anime.id,
@@ -55,11 +62,11 @@ export function useWatchlistToggle(anime: AniListMedia) {
         status: currentlyInWatchlist ? null : DEFAULT_WATCHLIST_STATUS,
       });
 
-      return { previousStatus, currentlyInWatchlist };
+      return { rollbackStatus, currentlyInWatchlist };
     },
     onError: (_error, _variables, context) => {
-      if (context?.previousStatus) {
-        queryClient.setQueryData(statusQueryKey, context.previousStatus);
+      if (context?.rollbackStatus) {
+        queryClient.setQueryData(statusQueryKey, context.rollbackStatus);
       }
       toast.error("Could not update watchlist");
     },

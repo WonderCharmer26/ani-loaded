@@ -161,6 +161,13 @@ export default function RecommendationsPage() {
       );
       setDraft("");
     },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Unable to send recommendation message",
+      );
+    },
   });
 
   const handleCreateConversation = async () => {
@@ -188,7 +195,7 @@ export default function RecommendationsPage() {
         content,
       });
     } catch {
-      // errors surface through the service layer or query error boundaries
+      // errors surface through the mutation error handler
     }
   };
 

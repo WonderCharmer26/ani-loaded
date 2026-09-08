@@ -41,6 +41,12 @@ describe("useWatchlistToggle", () => {
     );
   };
 
+  const createWrapperWithClient = (queryClient: QueryClient) => {
+    return ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+  };
+
   it("adds anime to watchlist when currently not in watchlist", async () => {
     getWatchlistStatus.mockResolvedValueOnce({
       anime_id: 1,
@@ -107,6 +113,46 @@ describe("useWatchlistToggle", () => {
 
     await waitFor(() => {
       expect(removeFromWatchlist).toHaveBeenCalledWith(5);
+    });
+  });
+
+  it("rolls back a failed optimistic add when the status cache was empty", async () => {
+    getWatchlistStatus.mockImplementationOnce(() => new Promise(() => undefined));
+    addToWatchlist.mockRejectedValueOnce(new Error("request failed"));
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const anime = {
+      id: 7,
+      title: { english: "Samurai Champloo" },
+      coverImage: {},
+      genres: ["Action"],
+    };
+
+    const { result } = renderHook(() => useWatchlistToggle(anime), {
+      wrapper: createWrapperWithClient(queryClient),
+    });
+
+    act(() => {
+      result.current.toggleWatchlist();
+    });
+
+    await waitFor(() => {
+      expect(addToWatchlist).toHaveBeenCalledWith(7, {
+        anime_id: 7,
+        title: "Samurai Champloo",
+        genres: ["Action"],
+        status: "plan_to_watch",
+      });
+    });
+
+    await waitFor(() => {
+      expect(queryClient.getQueryData(["watchlistStatus", 7])).toEqual({
+        anime_id: 7,
+        in_watchlist: false,
+        status: null,
+      });
     });
   });
 });
