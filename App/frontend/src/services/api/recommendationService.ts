@@ -1,71 +1,116 @@
-// TODO: Work on recommendation functionality
-import type { AniListMedia } from "../../schemas/animeSchemas";
-import type { RecommendationBucket } from "../../schemas/recommendations";
+import axios from "axios";
+import { z } from "zod";
+import { toast } from "sonner";
 
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+import {
+  ChatSessionSchema,
+  ChatSessionWithMessagesSchema,
+  type ChatSession,
+  type ChatSessionWithMessages,
+} from "@/schemas/zod/chatSchema";
+import { backendUrl } from "./fetchAnimes";
+import { supabase } from "../supabase/supabaseConnection";
 
-const placeholderCover =
-  "https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=400&q=80";
+const ChatSessionListSchema = z.array(ChatSessionSchema);
 
-const makeAnime = (
-  id: number,
-  title: string,
-  genres: string[],
-): AniListMedia => ({
-  id,
-  title: { english: title },
-  episodes: 13,
-  coverImage: {
-    large: placeholderCover,
-    medium: placeholderCover,
-  },
-  genres,
-  description: "Mock recommendation entry.",
-  averageScore: 85,
-  status: "FINISHED",
-  studios: { nodes: [] },
-  characters: { edges: [] },
-});
+function buildApiError(error: unknown, fallback: string): Error {
+  if (axios.isAxiosError(error)) {
+    const status = error.response?.status;
+    const detail = error.response?.data?.detail;
+    const detailText =
+      typeof detail === "string" ? detail : error.message || fallback;
 
-const mockForYou: RecommendationBucket[] = [
-  {
-    id: "bucket-1",
-    label: "Because you liked Found Family arcs",
-    reason: "Matches emotional beats from your recent completions.",
-    items: [
-      makeAnime(200, "Buddy Daddies", ["Action", "Comedy"]),
-      makeAnime(201, "March Comes in Like a Lion", ["Drama"]),
-    ],
-  },
-  {
-    id: "bucket-2",
-    label: "High-energy action",
-    reason: "Based on top rated shounen entries in your profile.",
-    items: [
-      makeAnime(202, "Chainsaw Man", ["Action"]),
-      makeAnime(203, "Dorohedoro", ["Fantasy"]),
-    ],
-  },
-];
+    if (status) {
+      return new Error(`${fallback} (status ${status}): ${detailText}`);
+    }
 
-const globalFallback: AniListMedia[] = [
-  makeAnime(204, "Cowboy Bebop", ["Action", "Sci-Fi"]),
-  makeAnime(205, "Demon Slayer", ["Action"]),
-  makeAnime(206, "Spy x Family", ["Comedy"]),
-];
-
-export async function getPersonalizedRecommendations(
-  userId: string,
-): Promise<RecommendationBucket[]> {
-  await delay(210);
-  if (!userId) {
-    return [];
+    return new Error(`${fallback}: ${detailText}`);
   }
-  return mockForYou;
+
+  if (error instanceof Error) {
+    return new Error(`${fallback}: ${error.message}`);
+  }
+
+  return new Error(fallback);
 }
 
-export async function getFallbackRecommendations(): Promise<AniListMedia[]> {
-  await delay(120);
-  return globalFallback;
+const getAuthHeader = async (): Promise<{ Authorization: string }> => {
+  const { data, error } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+
+  if (error) {
+    toast.error("Unable to validate your session.");
+    throw new Error("There was an error validating your session");
+  }
+
+  if (!token) {
+    throw new Error("Missing auth token for recommendation request");
+  }
+
+  return { Authorization: `Bearer ${token}` };
+};
+
+export async function getRecommendationConversations(): Promise<ChatSession[]> {
+  const headers = await getAuthHeader();
+
+  try {
+    const response = await axios.get(
+      `${backendUrl}/recommendations/conversations`,
+      {
+        headers,
+      },
+    );
+    return ChatSessionListSchema.parse(response.data);
+  } catch (error) {
+    throw buildApiError(error, "Failed to load recommendation chats");
+  }
 }
 
+export async function createRecommendationConversation(): Promise<ChatSession> {
+  const headers = await getAuthHeader();
+
+  try {
+    const response = await axios.post(
+      `${backendUrl}/recommendations/conversations`,
+      {},
+      { headers },
+    );
+    return ChatSessionSchema.parse(response.data);
+  } catch (error) {
+    throw buildApiError(error, "Failed to create recommendation chat");
+  }
+}
+
+export async function getRecommendationConversation(
+  sessionId: string,
+): Promise<ChatSessionWithMessages> {
+  const headers = await getAuthHeader();
+
+  try {
+    const response = await axios.get(
+      `${backendUrl}/recommendations/conversations/${sessionId}`,
+      { headers },
+    );
+    return ChatSessionWithMessagesSchema.parse(response.data);
+  } catch (error) {
+    throw buildApiError(error, "Failed to load recommendation chat");
+  }
+}
+
+export async function sendRecommendationMessage(
+  sessionId: string,
+  content: string,
+): Promise<ChatSessionWithMessages> {
+  const headers = await getAuthHeader();
+
+  try {
+    const response = await axios.post(
+      `${backendUrl}/recommendations/conversations/${sessionId}/messages`,
+      { content },
+      { headers },
+    );
+    return ChatSessionWithMessagesSchema.parse(response.data);
+  } catch (error) {
+    throw buildApiError(error, "Failed to send recommendation message");
+  }
+}

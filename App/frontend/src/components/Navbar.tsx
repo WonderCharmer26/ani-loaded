@@ -18,16 +18,44 @@ const navbarLinks: NavbarLink[] = [
   { id: 5, label: "RECOMMENDATION", link: "/recommendations" },
 ];
 
-export const Navbar = () => {
+interface NavbarProps {
+  showRecommendationsMenuButton?: boolean;
+  isRecommendationsSidebarOpen?: boolean;
+  onToggleRecommendationsSidebar?: () => void;
+}
+
+export const Navbar = ({
+  showRecommendationsMenuButton = false,
+  isRecommendationsSidebarOpen = false,
+  onToggleRecommendationsSidebar,
+}: NavbarProps) => {
   const { user } = useAuthContext();
   const { pathname } = useLocation();
 
   return (
     <nav className="flex relative pt-5 z-50 top-0 w-full h-[2.875rem] items-center justify-between text-white">
       {/* Logo */}
-      <Link to="/" className="h-25 w-25 shrink-0">
-        <img src={AniLoadedLogo} alt="Site Logo" />
-      </Link>
+      <div className="flex items-center gap-3">
+        {showRecommendationsMenuButton ? (
+          <button
+            type="button"
+            onClick={onToggleRecommendationsSidebar}
+            className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/12 bg-white/4 text-slate-300 transition hover:border-[#3CB4FF]/40 hover:bg-[#3CB4FF]/12 hover:text-white"
+            aria-label={
+              isRecommendationsSidebarOpen
+                ? "Close recommendation chats"
+                : "Open recommendation chats"
+            }
+            aria-expanded={isRecommendationsSidebarOpen}
+            aria-controls="recommendations-sidebar"
+          >
+            <Menu size={22} />
+          </button>
+        ) : null}
+        <Link to="/" className="h-25 w-25 shrink-0">
+          <img src={AniLoadedLogo} alt="Site Logo" />
+        </Link>
+      </div>
 
       {/* Nav links + search */}
       <div className="flex items-center">
@@ -82,7 +110,6 @@ export const Navbar = () => {
             >
               Sign In
             </Link>
-            <Menu size={30} className="text-slate-400" />
           </>
         )}
       </div>
