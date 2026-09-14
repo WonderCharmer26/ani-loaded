@@ -104,6 +104,7 @@ async def seed():
         rows = []
         for anime, embedding in zip(anime_list, embeddings):
             title = anime["title"].get("english") or anime["title"].get("romaji")
+            cover_image = anime.get("coverImage") or {}
             rows.append(
                 {
                     "id": anime["id"],
@@ -112,7 +113,7 @@ async def seed():
                     "description": anime.get("description") or "",
                     "average_score": anime.get("averageScore"),
                     "status": anime.get("status"),
-                    "cover_url": anime["coverImage"]["large"],
+                    "cover_url": cover_image.get("large"),
                     "embedding": embedding,  # the 1536-dim vector
                 }
             )

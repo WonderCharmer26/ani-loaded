@@ -138,6 +138,7 @@ async def test_send_recommendation_message_creates_assistant_exchange(
             make_supabase_response([titled_session_row]),
             make_supabase_response([user_message_row]),
             make_supabase_response([assistant_message_row]),
+            make_supabase_response([user_message_row, assistant_message_row]),
             make_supabase_response([titled_session_row]),
             make_supabase_response(titled_session_row),
             make_supabase_response([user_message_row, assistant_message_row]),
@@ -181,6 +182,50 @@ async def test_send_recommendation_message_creates_assistant_exchange(
     builder.storage.session.aclose.assert_awaited_once()
     builder.auth.close.assert_awaited_once()
     builder.realtime.close.assert_awaited_once()
+
+
+async def test_send_recommendation_message_updates_count_after_agent_failure(
+    async_client, monkeypatch
+):
+    fake_user = make_fake_user()
+    session_row = make_chat_session_row()
+    user_message_row = make_chat_message_row(content="Looking for dark fantasy anime")
+    builder = make_closeable_supabase_builder()
+    builder.execute = AsyncMock(
+        side_effect=[
+            make_supabase_response(session_row),
+            make_supabase_response([user_message_row]),
+            make_supabase_response([session_row]),
+            make_supabase_response([user_message_row]),
+            make_supabase_response([user_message_row]),
+            make_supabase_response([session_row]),
+        ]
+    )
+
+    monkeypatch.setattr(
+        "routers.recommendations.auth_validator", AsyncMock(return_value=fake_user)
+    )
+    get_client = AsyncMock(return_value=builder)
+    monkeypatch.setattr("routers.recommendations.get_supabase_client", get_client)
+    monkeypatch.setattr(
+        "routers.recommendations.get_filtered_recommendations",
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        "routers.recommendations.run_recommendation_agent",
+        AsyncMock(side_effect=RuntimeError("agent unavailable")),
+    )
+
+    response = await async_client.post(
+        f"/recommendations/conversations/{session_row['id']}/messages",
+        json={"content": "Looking for dark fantasy anime"},
+        headers=_auth_headers(),
+    )
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == "Recommendation agent failed"
+    assert builder.update.call_args_list[1].args[0]["message_count"] == 1
+    assert get_client.await_count == 2
 
 
 async def test_send_recommendation_message_rejects_blank_content(

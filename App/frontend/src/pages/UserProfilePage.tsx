@@ -11,6 +11,18 @@ import { getAnimeInfo } from "../services/api/fetchAnimes";
 import type { AniListMedia } from "../schemas/animeSchemas";
 import { useAuthContext } from "../services/supabase/hooks/AuthProvider";
 
+function createWatchlistFallbackAnime(item: UserWatchlistResponse): AniListMedia {
+  return {
+    id: item.anime_id,
+    title: {
+      english: item.title,
+      romaji: item.title,
+    },
+    coverImage: {},
+    genres: item.genres,
+  };
+}
+
 export default function UserProfilePage() {
   // state for the user account
   const [activeTab, setActiveTab] = useState("overview");
@@ -46,8 +58,18 @@ export default function UserProfilePage() {
   const watchlistIds = watchlistItems.map((item) => item.anime_id);
   const { data: animeDataList, isLoading: animeLoading } = useQuery({
     queryKey: ["watchlistAnimeData", watchlistIds],
-    queryFn: () => Promise.all(watchlistIds.map((id) => getAnimeInfo(id))),
-    enabled: watchlistIds.length > 0,
+    queryFn: async () => {
+      const results = await Promise.allSettled(
+        watchlistItems.map((item) => getAnimeInfo(item.anime_id)),
+      );
+
+      return results.map((result, index) =>
+        result.status === "fulfilled"
+          ? result.value
+          : createWatchlistFallbackAnime(watchlistItems[index]),
+      );
+    },
+    enabled: activeTab === "watchlist" && watchlistIds.length > 0,
   });
 
   // Merge watchlist metadata with full anime info.
@@ -680,6 +702,7 @@ function WatchlistCard({
 }) {
   const title =
     anime.title?.english ?? anime.title?.romaji ?? item.title;
+  const coverUrl = anime.coverImage?.large;
 
   return (
     <a href={`/anime/${anime.id}`} style={{ textDecoration: "none" }}>
@@ -688,11 +711,17 @@ function WatchlistCard({
         style={{ aspectRatio: "4/7" }}
       >
         {/* Cover image */}
-        <img
-          src={anime.coverImage?.large ?? ""}
-          alt={title}
-          className="w-full h-full object-cover border-2 border-black rounded-2xl transition-transform duration-200 group-hover:scale-[1.025]"
-        />
+        {coverUrl ? (
+          <img
+            src={coverUrl}
+            alt={title}
+            className="w-full h-full object-cover border-2 border-black rounded-2xl transition-transform duration-200 group-hover:scale-[1.025]"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center rounded-2xl border-2 border-black bg-slate-900 px-4 text-center text-sm font-semibold leading-6 text-slate-200 transition-transform duration-200 group-hover:scale-[1.025]">
+            {title}
+          </div>
+        )}
 
         {/* Status badge — top left */}
         <div

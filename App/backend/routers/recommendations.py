@@ -95,6 +95,24 @@ async def _get_session_with_messages(
     return ChatSessionWithMessages(**session.model_dump(), messages=messages)
 
 
+async def _sync_session_activity(
+    session_id: UUID, supabase: AsyncClient
+) -> list[ChatMessage]:
+    messages = await _get_session_messages(session_id, supabase)
+    await (
+        supabase.table("chat_sessions")
+        .update(
+            {
+                "message_count": len(messages),
+                "last_active_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+        .eq("id", str(session_id))
+        .execute()
+    )
+    return messages
+
+
 # Returns the current user's recommendation chat sessions, newest activity first.
 @router.get("/recommendations/conversations", response_model=list[ChatSession])
 async def get_recommendation_conversations(
@@ -199,6 +217,7 @@ async def send_recommendation_message(
     pipeline_stage = "persist_user_message"
     recent_messages: list[ChatMessage] = []
     filtered_results: list[MatchedAnimeResponse] = []
+    user_message_persisted = False
 
     try:
         async with request_supabase_client(authorization) as supabase:
@@ -232,6 +251,7 @@ async def send_recommendation_message(
                 )
                 .execute()
             )
+            user_message_persisted = True
 
             # create and add chat title if it doesn't exist
             pipeline_stage = "update_session_title"
@@ -245,8 +265,7 @@ async def send_recommendation_message(
 
             # get recent session messages
             pipeline_stage = "load_session_messages"
-            session_messages = await _get_session_messages(session_id, supabase)
-            recent_messages = session_messages[-12:]
+            recent_messages = (await _get_session_messages(session_id, supabase))[-12:]
 
             pipeline_stage = "filter_recommendations"
             filtered_results = await get_filtered_recommendations(
@@ -287,17 +306,7 @@ async def send_recommendation_message(
             )
 
             pipeline_stage = "update_session_metadata"
-            await (
-                supabase.table("chat_sessions")
-                .update(
-                    {
-                        "message_count": session.message_count + 2,
-                        "last_active_at": datetime.now(timezone.utc).isoformat(),
-                    }
-                )
-                .eq("id", str(session_id))
-                .execute()
-            )
+            await _sync_session_activity(session_id, supabase)
 
             pipeline_stage = "load_updated_conversation"
             return await _get_session_with_messages(session_id, str(user.id), supabase)
@@ -315,6 +324,19 @@ async def send_recommendation_message(
                 "filtered_result_count": len(filtered_results),
             },
         )
+        if user_message_persisted:
+            try:
+                async with request_supabase_client(authorization) as supabase:
+                    await _sync_session_activity(session_id, supabase)
+            except Exception:
+                logger.exception(
+                    "Failed to update recommendation session metadata after pipeline error",
+                    extra={
+                        "pipeline_stage": "sync_failed_session_activity",
+                        "session_id": str(session_id),
+                        "user_id": str(user.id),
+                    },
+                )
         raise HTTPException(
             status_code=500,
             detail="Recommendation agent failed",
