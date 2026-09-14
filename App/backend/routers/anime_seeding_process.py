@@ -48,15 +48,22 @@ def build_embedding_text(anime: dict) -> str:
     return f"Title: {title}. Genres: {genres}. Status: {status}. Season: {season}. {description}"
 
 
+def get_required_env(name: str) -> str:
+    value = os.environ.get(name)
+    if not value:
+        raise RuntimeError(f"{name} must be set")
+    return value
+
+
 # make the request to the animelist api and add the data to the database
 async def seed():
     # openai client to make help with starting the connection to openai
-    openai = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    openai = AsyncOpenAI(api_key=get_required_env("OPENAI_API_KEY"))
 
-    # used anon key to bypass the RLS
+    # Use the service role key so the seeding script can bypass RLS.
     supabase = await acreate_client(
-        os.environ["SUPABASE_URL"],
-        os.environ["SUPABASE_SERVICE_KEY"],
+        get_required_env("SUPABASE_URL"),
+        get_required_env("SUPABASE_SERVICE_KEY"),
     )
 
     # async client for supabase
