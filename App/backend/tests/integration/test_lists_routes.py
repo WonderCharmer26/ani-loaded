@@ -43,15 +43,36 @@ def _watchlist_row(**overrides):
 # GET /lists
 # ---------------------------------------------------------------------------
 
-async def test_get_all_lists_requires_authorization(async_client):
+async def test_get_all_lists_does_not_require_authorization(async_client, monkeypatch):
+    list_row = make_list_row()
+    auth_validator = AsyncMock()
+    monkeypatch.setattr("routers.lists.auth_validator", auth_validator)
+
+    builder = make_supabase_builder()
+    builder.execute = AsyncMock(
+        side_effect=[
+            make_supabase_response([list_row]),  # user_list query
+            make_supabase_response(  # profiles query
+                [{"user_id": "user-uuid-1", "username": "testuser"}]
+            ),
+        ]
+    )
+    get_client = AsyncMock(return_value=builder)
+    monkeypatch.setattr("routers.lists.get_supabase_client", get_client)
+    monkeypatch.setattr(
+        "routers.lists.fetch_anilist_media_map",
+        AsyncMock(return_value={1: make_anilist_media_item(1)}),
+    )
+
     response = await async_client.get("/lists")
-    assert response.status_code == 422
+
+    assert response.status_code == 200
+    auth_validator.assert_not_awaited()
+    get_client.assert_awaited_once_with()
+
 
 async def test_get_all_lists_returns_200(async_client, monkeypatch):
     list_row = make_list_row()
-    monkeypatch.setattr(
-        "routers.lists.auth_validator", AsyncMock(return_value=make_fake_user())
-    )
 
     builder = make_supabase_builder(execute_data=[list_row])
     # normalize_owner_username calls supabase for profiles
@@ -70,19 +91,16 @@ async def test_get_all_lists_returns_200(async_client, monkeypatch):
         AsyncMock(return_value={1: make_anilist_media_item(1)}),
     )
 
-    response = await async_client.get("/lists", headers=_auth_headers())
+    response = await async_client.get("/lists")
     assert response.status_code == 200
 
 
 async def test_get_all_lists_empty_returns_404(async_client, monkeypatch):
     builder = make_supabase_builder(execute_data=[])
-    monkeypatch.setattr(
-        "routers.lists.auth_validator", AsyncMock(return_value=make_fake_user())
-    )
     get_client = AsyncMock(return_value=builder)
     monkeypatch.setattr("routers.lists.get_supabase_client", get_client)
 
-    response = await async_client.get("/lists", headers=_auth_headers())
+    response = await async_client.get("/lists")
     assert response.status_code == 404
 
 

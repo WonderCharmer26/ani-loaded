@@ -141,33 +141,30 @@ async def normalize_owner_username(
 
 # display all users lists
 @router.get("/lists", response_model=list[UserListWithAllAnime])
-async def get_all_lists(authorization: str = Header(...)):
-    # check if the user is validated
-    await auth_validator(authorization)
-
+async def get_all_lists():
     # access the supabase table
     try:
-        async with request_supabase_client(authorization) as supabase:
-            # get the users_list and the user_list_entry that are public
-            res = await (
-                supabase.table("user_list")
-                .select("*, user_list_entry(*)")
-                .eq("visibility", "public")
-                .execute()
-            )
+        supabase = await get_supabase_client()
+        # get the users_list and the user_list_entry that are public
+        res = await (
+            supabase.table("user_list")
+            .select("*, user_list_entry(*)")
+            .eq("visibility", "public")
+            .execute()
+        )
 
-            if not res.data:
-                raise HTTPException(status_code=404, detail="No lists found")
+        if not res.data:
+            raise HTTPException(status_code=404, detail="No lists found")
 
-            rows_with_usernames = await normalize_owner_username(res.data, supabase)
-            hydrated = await attach_anime_to_list_entries(rows_with_usernames)
+        rows_with_usernames = await normalize_owner_username(res.data, supabase)
+        hydrated = await attach_anime_to_list_entries(rows_with_usernames)
 
-            # validate all the items in the list
-            validated_list = [
-                UserListWithAllAnime.model_validate(item) for item in hydrated
-            ]
+        # validate all the items in the list
+        validated_list = [
+            UserListWithAllAnime.model_validate(item) for item in hydrated
+        ]
 
-            return validated_list
+        return validated_list
 
     except Exception as e:
         raise HTTPException(
