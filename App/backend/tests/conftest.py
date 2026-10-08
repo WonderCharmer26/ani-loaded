@@ -6,6 +6,7 @@ import os
 os.environ.setdefault("SUPABASE_URL", "https://placeholder.supabase.co")
 os.environ.setdefault("SUPABASE_KEY", "placeholder")
 os.environ.setdefault("STORAGE_KEY_DISCUSSION", "placeholder")
+os.environ.setdefault("OPENAI_API_KEY", "placeholder")
 
 import pytest
 import httpx

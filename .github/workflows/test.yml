@@ -64,3 +64,4 @@ jobs:
           SUPABASE_URL: https://placeholder.supabase.co
           SUPABASE_KEY: placeholder
           STORAGE_KEY_DISCUSSION: placeholder
+          OPENAI_API_KEY: placeholder

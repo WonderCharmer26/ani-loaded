@@ -1,10 +1,15 @@
 # AGENTS.md
 
+## First Read for Context
+
+- Read `CODEBASE_MAP.md` first for project architecture, file responsibilities, feature map, and quick catch-up context before diving into individual files.
+
 ## Build/Lint/Test Commands
 
 - **Build:** `npm run build`
 - **Lint:** `eslint .`
 - **Test:** (No explicit test command in package.json, assuming component tests are run during build)
+- **Backend tests:** Use the backend virtualenv, e.g. `cd backend && ./venv/bin/pytest` or `cd backend && source venv/bin/activate && pytest`
 
 ## Code Style Guidelines
 

@@ -1,24 +1,38 @@
 import os
 import uuid
+from collections.abc import AsyncIterator
 from inspect import iscoroutinefunction
 
-from gotrue.types import User
 import httpx
+from database.supabase_client import close_supabase_client, get_supabase_client
 from dotenv import load_dotenv
-from fastapi import APIRouter, Body, File, Form, Header, Query, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Form, Header, Query, UploadFile
 from fastapi.exceptions import HTTPException
+from gotrue.types import User
+from schemas.discussions import (
+    CommentRequest,
+    DiscussionsResponse,
+    DiscussionUpdateRequest,
+)
 from starlette.concurrency import run_in_threadpool
-
-from database.supabase_client import get_supabase_client
-from schemas.discussions import DiscussionsResponse
-from schemas.discussions import CommentRequest, DiscussionUpdateRequest, DiscussionsResponse
+from supabase import AsyncClient
 from utilities.auth_validator import auth_validator
-from utilities.genreFunctions import ANILIST_URL
 from utilities.fileFunctions import ext_from_filename
-
+from utilities.genreFunctions import ANILIST_URL
 
 # Api router
 router = APIRouter()
+
+
+async def get_authorized_supabase(
+    authorization: str = Header(...),
+) -> AsyncIterator[AsyncClient]:
+    client = await get_supabase_client(authorization)
+    try:
+        yield client
+    finally:
+        await close_supabase_client(client)
+
 
 # load in env
 load_dotenv()
@@ -37,7 +51,7 @@ query ($id: Int) {
 """
 
 
-# helper function to clean up word 
+# helper function to clean up word
 def normalize_optional_text(value: str | None) -> str | None:
     # account for no word
     if value is None:
@@ -84,9 +98,7 @@ async def validate_anime_exists(anime_id: int) -> bool:
         except httpx.HTTPStatusError as error:
             raise HTTPException(
                 status_code=503,
-                detail=(
-                    f"AniList validation failed: {error.response.status_code}"
-                ),
+                detail=(f"AniList validation failed: {error.response.status_code}"),
             )
         except httpx.RequestError as error:
             raise HTTPException(
@@ -101,7 +113,9 @@ async def get_discussions(
     search: str | None = Query(None, description="Search by title keyword"),
     category_id: str | None = Query(None, description="Filter by category ID"),
     anime_id: int | None = Query(None, description="Filter by anime ID"),
-    sort: str = Query("newest", description="Sort by: newest, oldest, most_upvoted, most_commented"),
+    sort: str = Query(
+        "newest", description="Sort by: newest, oldest, most_upvoted, most_commented"
+    ),
 ):
     """
     This function returns all the discussions for the discussions page
@@ -247,15 +261,16 @@ async def post_new_discussion(
     episode_number: int | None = Form(None),  # optional params
     season_number: int | None = Form(None),  # optional params
     authorization: str = Header(...),  # required
+    supabase: AsyncClient = Depends(get_authorized_supabase),
 ):
 
     # check if the request has an authorized user handles errors
     user: User = await auth_validator(authorization)
-    supabase = await get_supabase_client()
-
     # account for negative anime
     if anime_id <= 0:
-        raise HTTPException(status_code=422, detail="anime_id must be a positive integer")
+        raise HTTPException(
+            status_code=422, detail="anime_id must be a positive integer"
+        )
 
     # validate the anime with anilist
     anime_exists = await validate_anime_exists(anime_id)
@@ -281,7 +296,7 @@ async def post_new_discussion(
         await supabase.table("anime").upsert(anime_payload, on_conflict="id").execute()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Anime upsert failed: {e}")
-    
+
     # variables to hold the thumbnail info
     thumbnail_path = None
     thumbnail_public_url = None
@@ -384,15 +399,17 @@ async def post_new_discussion(
 
 # Route to get the upvote status for a specific discussion for the current user
 @router.get("/discussions/{discussion_id}/upvote")
-async def get_upvote_status(discussion_id: str, authorization: str = Header(...)):
+async def get_upvote_status(
+    discussion_id: str,
+    authorization: str = Header(...),
+    supabase: AsyncClient = Depends(get_authorized_supabase),
+):
     """
     Returns whether the current user has upvoted a discussion.
     """
     user: User = await auth_validator(authorization)
-  
+
     try:
-        supabase = await get_supabase_client()
-        
         response = (
             await supabase.table("discussion_upvotes")
             .select("*")
@@ -402,12 +419,18 @@ async def get_upvote_status(discussion_id: str, authorization: str = Header(...)
         )
         return {"upvoted": len(response.data) > 0}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch upvote status: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch upvote status: {e}"
+        )
 
 
 # Route to toggle an upvote on a discussion
 @router.post("/discussions/{discussion_id}/upvote")
-async def toggle_upvote(discussion_id: str, authorization: str = Header(...)):
+async def toggle_upvote(
+    discussion_id: str,
+    authorization: str = Header(...),
+    supabase: AsyncClient = Depends(get_authorized_supabase),
+):
     """
     Toggles an upvote on a discussion for the current user.
     Returns the new upvote state and updated count.
@@ -415,8 +438,6 @@ async def toggle_upvote(discussion_id: str, authorization: str = Header(...)):
     user: User = await auth_validator(authorization)
 
     try:
-        supabase = await get_supabase_client()
-      
         result = await supabase.rpc(
             "toggle_discussion_upvote",
             {"p_discussion_id": discussion_id, "p_user_id": str(user.id)},
@@ -432,17 +453,17 @@ async def post_comment(
     discussion_id: str,
     comment: CommentRequest = Body(...),
     authorization: str = Header(...),
+    supabase: AsyncClient = Depends(get_authorized_supabase),
 ):
     """Submit a comment on a discussion"""
     user: User = await auth_validator(authorization)
-    supabase = await get_supabase_client()
-
     # validate body is not empty
     body = comment.body.strip()
     if not body:
         raise HTTPException(status_code=422, detail="Comment body cannot be empty")
 
     # get username and avatar from user metadata
+    # NOTE: might change to profile table, so we dont have to use metadata
     metadata = user.user_metadata or {}
     username = metadata.get("username", "Anonymous")
     avatar_url = metadata.get("avatar_url")
@@ -476,9 +497,12 @@ async def post_comment(
             .execute()
         )
         new_count = (discussion.data.get("comment_count", 0)) + 1
-        await supabase.table("discussions").update(
-            {"comment_count": new_count}
-        ).eq("id", discussion_id).execute()
+        await (
+            supabase.table("discussions")
+            .update({"comment_count": new_count})
+            .eq("id", discussion_id)
+            .execute()
+        )
     except Exception:
         # comment was already saved, don't fail the whole request
         pass
@@ -488,12 +512,15 @@ async def post_comment(
 
 # Route to get comment upvote status for the current user
 @router.get("/comments/{comment_id}/upvote")
-async def get_comment_upvote_status(comment_id: str, authorization: str = Header(...)):
+async def get_comment_upvote_status(
+    comment_id: str,
+    authorization: str = Header(...),
+    supabase: AsyncClient = Depends(get_authorized_supabase),
+):
     """Returns whether the current user has upvoted a comment."""
     user: User = await auth_validator(authorization)
 
     try:
-        supabase = await get_supabase_client()
         response = (
             await supabase.table("comment_upvotes")
             .select("*")
@@ -503,24 +530,31 @@ async def get_comment_upvote_status(comment_id: str, authorization: str = Header
         )
         return {"upvoted": len(response.data) > 0}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch comment upvote status: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch comment upvote status: {e}"
+        )
 
 
 # Route to toggle an upvote on a comment
 @router.post("/comments/{comment_id}/upvote")
-async def toggle_comment_upvote(comment_id: str, authorization: str = Header(...)):
+async def toggle_comment_upvote(
+    comment_id: str,
+    authorization: str = Header(...),
+    supabase: AsyncClient = Depends(get_authorized_supabase),
+):
     """Toggles an upvote on a comment for the current user."""
     user: User = await auth_validator(authorization)
 
     try:
-        supabase = await get_supabase_client()
         result = await supabase.rpc(
             "toggle_comment_upvote",
             {"p_comment_id": comment_id, "p_user_id": str(user.id)},
         ).execute()
         return result.data
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to toggle comment upvote: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to toggle comment upvote: {e}"
+        )
 
 
 # Route to update a discussion (only by the author)
@@ -529,12 +563,12 @@ async def update_discussion(
     discussion_id: str,
     updates: DiscussionUpdateRequest = Body(...),
     authorization: str = Header(...),
+    supabase: AsyncClient = Depends(get_authorized_supabase),
 ):
     """Update a discussion (only by author)"""
     user: User = await auth_validator(authorization)
 
     try:
-        supabase = await get_supabase_client()
         # check that this user owns the discussion
         discussion = (
             await supabase.table("discussions")
@@ -548,7 +582,9 @@ async def update_discussion(
             raise HTTPException(status_code=404, detail="Discussion not found")
 
         if discussion.data["created_by"] != str(user.id):
-            raise HTTPException(status_code=403, detail="You can only edit your own discussions")
+            raise HTTPException(
+                status_code=403, detail="You can only edit your own discussions"
+            )
 
         # build update payload with only provided fields
         payload = {}
@@ -583,12 +619,12 @@ async def update_discussion(
 async def delete_discussion(
     discussion_id: str,
     authorization: str = Header(...),
+    supabase: AsyncClient = Depends(get_authorized_supabase),
 ):
     """Delete a discussion (only by author)"""
     user: User = await auth_validator(authorization)
 
     try:
-        supabase = await get_supabase_client()
         # check that this user owns the discussion
         discussion = (
             await supabase.table("discussions")
@@ -602,17 +638,25 @@ async def delete_discussion(
             raise HTTPException(status_code=404, detail="Discussion not found")
 
         if discussion.data["created_by"] != str(user.id):
-            raise HTTPException(status_code=403, detail="You can only delete your own discussions")
+            raise HTTPException(
+                status_code=403, detail="You can only delete your own discussions"
+            )
 
         # delete comments first
-        await supabase.table("discussions_comments").delete().eq(
-            "discussion_id", discussion_id
-        ).execute()
+        await (
+            supabase.table("discussions_comments")
+            .delete()
+            .eq("discussion_id", discussion_id)
+            .execute()
+        )
 
         # delete upvotes
-        await supabase.table("discussion_upvotes").delete().eq(
-            "discussion_id", discussion_id
-        ).execute()
+        await (
+            supabase.table("discussion_upvotes")
+            .delete()
+            .eq("discussion_id", discussion_id)
+            .execute()
+        )
 
         # delete the discussion
         await supabase.table("discussions").delete().eq("id", discussion_id).execute()
@@ -630,5 +674,3 @@ async def delete_discussion(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete discussion: {e}")
-
-

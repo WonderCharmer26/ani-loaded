@@ -8,6 +8,7 @@ from tests.helpers.mock_factories import (
     make_discussion_row,
     make_comment_row,
     make_fake_user,
+    make_closeable_supabase_builder,
     make_supabase_builder,
     make_supabase_response,
     make_httpx_mock,
@@ -107,7 +108,10 @@ async def test_get_discussion_comments_returns_200(async_client, monkeypatch):
 
 
 async def test_get_discussion_comments_returns_data_and_total(async_client, monkeypatch):
-    rows = [make_comment_row(), make_comment_row(id="comment-uuid-2")]
+    rows = [
+        make_comment_row(upvote_count=3),
+        make_comment_row(id="comment-uuid-2"),
+    ]
     builder = make_supabase_builder(execute_data=rows)
     monkeypatch.setattr(
         "routers.discussions.get_supabase_client", AsyncMock(return_value=builder)
@@ -115,6 +119,31 @@ async def test_get_discussion_comments_returns_data_and_total(async_client, monk
 
     data = (await async_client.get("/discussions/disc-uuid-1/comments")).json()
     assert data["total"] == 2
+    assert data["data"][0]["upvote_count"] == 3
+
+
+async def test_get_comment_upvote_status_closes_authorized_client(
+    async_client, monkeypatch
+):
+    fake_user = make_fake_user()
+    builder = make_closeable_supabase_builder(execute_data=[])
+    monkeypatch.setattr(
+        "routers.discussions.auth_validator", AsyncMock(return_value=fake_user)
+    )
+    get_client = AsyncMock(return_value=builder)
+    monkeypatch.setattr("routers.discussions.get_supabase_client", get_client)
+
+    response = await async_client.get(
+        "/comments/comment-uuid-1/upvote",
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 200
+    get_client.assert_awaited_once_with("Bearer test-token")
+    builder.postgrest.aclose.assert_awaited_once()
+    builder.storage.session.aclose.assert_awaited_once()
+    builder.auth.close.assert_awaited_once()
+    builder.realtime.close.assert_awaited_once()
 
 
 async def test_get_discussion_comments_empty_returns_zero_total(async_client, monkeypatch):
