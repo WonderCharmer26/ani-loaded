@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+// import { Link } from "react-router-dom";
 import type { Discussion } from "../schemas/discussion";
 import type { DiscussionQueryParams } from "../services/api/discussionService";
 import {
@@ -79,7 +79,9 @@ export default function DiscussionPage() {
         </select>
         <select
           value={sort}
-          onChange={(e) => setSort(e.target.value as DiscussionQueryParams["sort"])}
+          onChange={(e) =>
+            setSort(e.target.value as DiscussionQueryParams["sort"])
+          }
           title="Sort discussions"
           className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-white focus:border-slate-500 focus:outline-none"
         >
@@ -96,11 +98,15 @@ export default function DiscussionPage() {
             <div className="text-sm text-slate-400">Loading threads...</div>
           ) : isError ? (
             <div className="text-sm text-red-300">
-              Could not load discussions: {error instanceof Error ? error.message : "Unknown error"}
+              Could not load discussions:{" "}
+              {error instanceof Error ? error.message : "Unknown error"}
             </div>
           ) : threads.length === 0 ? (
             <div className="text-sm text-slate-400">
-              No discussions found.{search || categoryId ? " Try adjusting your filters." : " Be the first to start one."}
+              No discussions found.
+              {search || categoryId
+                ? " Try adjusting your filters."
+                : " Be the first to start one."}
             </div>
           ) : (
             threads.map((thread) => (

@@ -56,8 +56,9 @@ MANIFEST
 # MCP config (contains secrets)
 .mcp.json
 
-# Pi local agent metadata
+# Local agent metadata
 .pi/
+.claude/
 
 # Terraform
 **/.terraform/
