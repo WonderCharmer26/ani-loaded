@@ -526,6 +526,7 @@ async def get_user_watchlist_by_user_id(
         )
 
 
+# rank based on most upvoted list in ascending order, add pagination
 @router.get("/popular-lists")
 async def get_popular_lists():
     pass

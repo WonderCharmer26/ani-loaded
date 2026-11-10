@@ -1,5 +1,7 @@
 # Codebase reacclimation: AniLoaded
 
+(**_Help new collaborators as well as us to remember the system architecture we designed so we can read through and get a mental map_**)
+
 > **Architecture document status:** inspected `main` at commit `943d7eee9945fbdb6cce728313427a3f56515b88` on 2026-10-26. The editable diagram source is included. PNG rendering is still pending because the local Excalidraw CLI could not find an installed browser.
 
 ## Executive summary
