@@ -107,6 +107,42 @@ async def validate_anime_exists(anime_id: int) -> bool:
             )
 
 
+# attach the author's username + avatar (from the profiles table) to each discussion
+async def attach_discussion_authors(supabase, discussion_rows: list[dict]) -> list[dict]:
+    author_ids = {
+        str(row["created_by"]) for row in discussion_rows if row.get("created_by")
+    }
+
+    profile_by_user_id: dict[str, dict] = {}
+    if author_ids:
+        try:
+            profile_response = await (
+                supabase.table("profiles")
+                .select("user_id, username, avatar_url")
+                .in_("user_id", list(author_ids))
+                .execute()
+            )
+            for profile_row in profile_response.data or []:
+                user_id = profile_row.get("user_id")
+                if user_id is not None:
+                    profile_by_user_id[str(user_id)] = profile_row
+        except Exception:
+            # author info is cosmetic, never fail the discussion request over it
+            profile_by_user_id = {}
+
+    enriched: list[dict] = []
+    for row in discussion_rows:
+        profile = profile_by_user_id.get(str(row.get("created_by")), {})
+        enriched.append(
+            {
+                **row,
+                "author_username": profile.get("username"),
+                "author_avatar_url": profile.get("avatar_url"),
+            }
+        )
+    return enriched
+
+
 # gets all the discussions from the database with optional search, filter, and sort
 @router.get("/discussions", response_model=DiscussionsResponse)
 async def get_discussions(
@@ -150,10 +186,13 @@ async def get_discussions(
         # execute query
         response = await query.execute()
 
+        # add author username/avatar for the feed
+        discussions = await attach_discussion_authors(supabase, response.data or [])
+
         # return data
         return {
-            "data": response.data,
-            "total": len(response.data),
+            "data": discussions,
+            "total": len(discussions),
         }
     except Exception as e:
         raise HTTPException(
@@ -203,7 +242,8 @@ async def get_discussion_by_id(discussion_id: str):
                 status_code=404, detail=f"Discussion with id {discussion_id} not found"
             )
 
-        return response.data
+        [discussion] = await attach_discussion_authors(supabase, [response.data])
+        return discussion
 
     except Exception as e:
         # Handle supabase errors

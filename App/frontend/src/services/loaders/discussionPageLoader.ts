@@ -6,8 +6,8 @@ export function discussionPageLoader(queryClient: QueryClient) {
   return async () => {
     try {
       await queryClient.ensureQueryData({
-        queryKey: ["discussions", {}],
-        queryFn: () => getAllDiscussions(),
+        queryKey: ["discussions", { sort: "newest" }],
+        queryFn: () => getAllDiscussions({ sort: "newest" }),
       });
     } catch {
       // Keep route navigation working even if prefetch fails.

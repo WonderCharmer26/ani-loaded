@@ -38,7 +38,7 @@ export default function RootLayout() {
           onToggleRecommendationsSidebar={toggleRecommendationsSidebar}
         />
       </header>
-      <main className="mt-[72px] ">
+      <main className="lg:mt-[72px]">
         <Outlet
           context={{
             isRecommendationsSidebarOpen,

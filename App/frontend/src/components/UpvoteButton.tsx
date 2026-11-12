@@ -1,13 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../services/supabase/supabaseConnection";
 import { getUpvoteStatus, toggleUpvote } from "../services/api/discussionService";
+import { ArrowBigUp } from "lucide-react";
+import { compactNumber } from "../utilities/timeAgo";
 
 interface UpvoteButtonProps {
   discussionId: string;
   initialCount: number;
+  variant?: "default" | "pill";
 }
 
-export default function UpvoteButton({ discussionId, initialCount }: UpvoteButtonProps) {
+export default function UpvoteButton({
+  discussionId,
+  initialCount,
+  variant = "default",
+}: UpvoteButtonProps) {
   const queryClient = useQueryClient();
 
   // Only fetch upvote status when there is an active session
@@ -74,6 +81,40 @@ export default function UpvoteButton({ discussionId, initialCount }: UpvoteButto
       queryClient.invalidateQueries({ queryKey: ["discussions"] });
     },
   });
+
+  // rounded pill used in the discussion feed (matches the v2 rounded design)
+  if (variant === "pill") {
+    return (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          mutate();
+        }}
+        disabled={isPending}
+        aria-pressed={upvoted}
+        aria-label={upvoted ? "Remove upvote" : "Upvote"}
+        className="group flex h-7 items-center gap-px rounded-[14px] bg-[#13161C] px-1 transition-colors hover:bg-[#1B2029] sm:h-8 sm:gap-0.5 sm:rounded-2xl sm:bg-transparent sm:px-1.5 sm:hover:bg-[#13161C]"
+      >
+        <ArrowBigUp
+          strokeWidth={1.75}
+          className={`size-[17px] shrink-0 sm:size-5 ${
+            upvoted
+              ? "fill-[#4DA3F0] text-[#4DA3F0]"
+              : "text-[#8B94A5] group-hover:text-[#4DA3F0]"
+          }`}
+        />
+        <span
+          className={`w-8 shrink-0 text-center font-['Inter'] text-[13px]/4.25 font-bold sm:w-9 sm:text-sm/4.5 ${
+            upvoted ? "text-[#5AA9F0]" : "text-white"
+          }`}
+        >
+          {compactNumber(displayCount)}
+        </span>
+      </button>
+    );
+  }
 
   return (
     <button

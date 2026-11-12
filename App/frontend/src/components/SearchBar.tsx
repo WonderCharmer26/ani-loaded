@@ -9,7 +9,15 @@ const PAGE: number = 1;
 const PER_PAGE: number = 5; // amount of suggestions to show under the input
 const DEBOUNCE_DELAY = 400;
 
-export const SearchBar = () => {
+interface SearchBarProps {
+  className?: string; // width/margin overrides for the wrapper
+  autoFocus?: boolean;
+}
+
+export const SearchBar = ({
+  className = "ml-2 w-64",
+  autoFocus = false,
+}: SearchBarProps) => {
   const [search, setSearch] = useState(""); // updates the search after every input
   const [debouncedSearch, setDebouncedSearch] = useState(""); // updated search that saves after a few seconds, takes val from search
   const location = useLocation(); // use to determine the location for the  function
@@ -96,11 +104,13 @@ export const SearchBar = () => {
   const showSuggestionPanel = search.length > 0;
 
   return (
-    <div className="relative">
-      <div className="ml-1.5 border border-slate-700 bg-slate-900 text-slate-300 rounded-2xl h-[1.875rem] w-[16rem] flex items-center gap-2 px-3 focus-within:border-slate-500 transition-colors">
-        <Search size={16} className="shrink-0 text-slate-500" />
+    <div className={`relative ${className}`}>
+      <div className="flex h-7.5 w-full items-center gap-2 rounded-2xl border border-[#2A3342] bg-[#141922] px-3 text-slate-300 transition-colors focus-within:border-slate-500">
+        <Search size={16} className="shrink-0 text-[#8793A8]" />
         <input
-          className="outline-none bg-transparent text-sm w-full placeholder-slate-500"
+          autoFocus={autoFocus}
+          aria-label="Search anime"
+          className="w-full bg-transparent text-sm outline-none placeholder-[#97A3B8]"
           placeholder="Search anime..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}

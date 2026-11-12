@@ -134,3 +134,57 @@ async def test_validate_anime_request_error_raises_503(monkeypatch):
     with pytest.raises(HTTPException) as exc_info:
         await validate_anime_exists(1)
     assert exc_info.value.status_code == 503
+
+
+# ---------------------------------------------------------------------------
+# attach_discussion_authors
+# ---------------------------------------------------------------------------
+
+from routers.discussions import attach_discussion_authors  # noqa: E402
+from tests.helpers.mock_factories import (  # noqa: E402
+    make_discussion_row,
+    make_supabase_builder,
+)
+
+
+async def test_attach_authors_adds_username_and_avatar():
+    row = make_discussion_row(created_by="user-1")
+    builder = make_supabase_builder(
+        execute_data=[
+            {"user_id": "user-1", "username": "MechaMuse", "avatar_url": "https://a/b.png"}
+        ]
+    )
+
+    [result] = await attach_discussion_authors(builder, [row])
+
+    assert result["author_username"] == "MechaMuse"
+    assert result["author_avatar_url"] == "https://a/b.png"
+    builder.in_.assert_called_once_with("user_id", ["user-1"])
+
+
+async def test_attach_authors_missing_profile_returns_none_fields():
+    row = make_discussion_row(created_by="user-2")
+    builder = make_supabase_builder(execute_data=[])
+
+    [result] = await attach_discussion_authors(builder, [row])
+
+    assert result["author_username"] is None
+    assert result["author_avatar_url"] is None
+
+
+async def test_attach_authors_profile_error_does_not_raise():
+    row = make_discussion_row(created_by="user-3")
+    builder = make_supabase_builder()
+    builder.execute.side_effect = RuntimeError("profiles blocked")
+
+    [result] = await attach_discussion_authors(builder, [row])
+
+    assert result["id"] == row["id"]
+    assert result["author_username"] is None
+
+
+async def test_attach_authors_empty_list_skips_query():
+    builder = make_supabase_builder()
+
+    assert await attach_discussion_authors(builder, []) == []
+    builder.execute.assert_not_called()

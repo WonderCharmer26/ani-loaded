@@ -18,6 +18,8 @@ export interface Discussion {
   comment_count: number;
   upvote_count: number;
   season_number?: number;
+  author_username?: string | null; // joined from profiles on the backend
+  author_avatar_url?: string | null;
 }
 
 export interface DiscussionResponse {

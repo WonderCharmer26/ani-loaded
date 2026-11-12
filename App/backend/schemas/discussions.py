@@ -23,6 +23,9 @@ class Discussions(BaseModel):
     comment_count: int
     upvote_count: int
     season_number: Optional[int]
+    # author info joined from the profiles table
+    author_username: Optional[str] = None
+    author_avatar_url: Optional[str] = None
 
 
 # function for the discussion posting
