@@ -2,7 +2,7 @@
 
 ## Start Here
 
-Read `CODEBASE_MAP.md` first for the architecture overview, file map, feature responsibilities, and quick project catch-up guide.
+Read [`../docs/architecture.md`](../docs/architecture.md) for the architecture overview, runtime flows, and configuration notes.
 
 ## Create your virtual environment
 
