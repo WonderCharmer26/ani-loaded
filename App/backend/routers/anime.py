@@ -479,3 +479,156 @@ async def get_anime_by_id(
 
     # return the data needed for the anime pages
     return data
+
+
+# formats that count as a "season" when walking prequels/sequels (skips movies, OVAs, specials)
+SEASON_FORMATS = {"TV", "TV_SHORT"}
+# how many prequel/sequel hops each AniList request fetches at once
+SEASON_RELATION_DEPTH = 3
+# safety cap so a strange relation graph can't loop forever
+MAX_SEASON_HOPS = 20
+
+SEASON_NODE_FIELDS = """
+    id
+    title { romaji english }
+    type
+    format
+    status
+    episodes
+    season
+    seasonYear
+    genres
+    coverImage { large medium }
+    nextAiringEpisode { episode }
+"""
+
+
+# builds a Media query with prequel/sequel relations nested `depth` levels deep
+def _build_season_query(depth: int = SEASON_RELATION_DEPTH) -> str:
+    def nested(level: int) -> str:
+        if level == 0:
+            return SEASON_NODE_FIELDS
+        return (
+            SEASON_NODE_FIELDS
+            + "relations { edges { relationType(version: 2) node { "
+            + nested(level - 1)
+            + " } } }"
+        )
+
+    return "query ($id: Int) { Media(id: $id, type: ANIME) { " + nested(depth) + " } }"
+
+
+# finds the prequel/sequel season of a media node, None if there isn't one
+def _find_related_season(
+    media: Mapping[str, Any], relation_type: str
+) -> dict[str, Any] | None:
+    relations = media.get("relations") or {}
+    for edge in relations.get("edges") or []:
+        node = edge.get("node") or {}
+        if (
+            edge.get("relationType") == relation_type
+            and node.get("type") == "ANIME"
+            and node.get("format") in SEASON_FORMATS
+        ):
+            return node
+    return None
+
+
+# trims a media node down to what the discussion form needs for one season
+def _season_summary(media: Mapping[str, Any], season_number: int) -> dict[str, Any]:
+    status = media.get("status")
+    episodes = media.get("episodes")
+    next_episode = (media.get("nextAiringEpisode") or {}).get("episode")
+
+    # only offer episodes that have actually aired
+    if status == "NOT_YET_RELEASED":
+        aired_episodes = 0
+    elif next_episode:
+        aired_episodes = next_episode - 1
+    else:
+        aired_episodes = episodes or 0
+
+    title = media.get("title") or {}
+    cover = media.get("coverImage") or {}
+    return {
+        "season_number": season_number,
+        "anime_id": media.get("id"),
+        "title": title.get("english") or title.get("romaji"),
+        "title_english": title.get("english"),
+        "title_romaji": title.get("romaji"),
+        # cover/genres/season let the form switch to this season without another fetch
+        "cover_image": {"large": cover.get("large"), "medium": cover.get("medium")},
+        "genres": media.get("genres") or [],
+        "season": media.get("season"),
+        "season_year": media.get("seasonYear"),
+        "status": status,
+        "episodes": episodes,
+        "aired_episodes": aired_episodes,
+    }
+
+
+async def _fetch_season_media(client: httpx.AsyncClient, anime_id: int) -> dict[str, Any]:
+    data = await _post_to_anilist(client, _build_season_query(), {"id": anime_id})
+    media = (data.get("data") or {}).get("Media")
+    if not media:
+        _raise_anilist_service_error(404, f"Anime {anime_id} not found.")
+    return media
+
+
+# follows prequel or sequel links from the start, fetching more when the nested data runs out
+async def _walk_seasons(
+    client: httpx.AsyncClient, start: dict[str, Any], relation_type: str
+) -> list[dict[str, Any]]:
+    chain: list[dict[str, Any]] = []
+    seen_ids = {start.get("id")}
+    current = start
+
+    for _ in range(MAX_SEASON_HOPS):
+        # nodes at the bottom of the nested query don't include their relations yet
+        if "relations" not in current:
+            current = await _fetch_season_media(client, current["id"])
+
+        next_season = _find_related_season(current, relation_type)
+        if next_season is None or next_season.get("id") in seen_ids:
+            break
+
+        seen_ids.add(next_season.get("id"))
+        chain.append(next_season)
+        current = next_season
+
+    return chain
+
+
+# NOTE: AniList has no "season" concept, each season is its own media linked by PREQUEL/SEQUEL
+@router.get("/anime/{anime_id}/seasons")
+async def get_anime_seasons(anime_id: int):
+    """
+    Returns every TV season in the franchise of the given anime, in order,
+    with episode counts so the discussion form can offer season/episode dropdowns
+    """
+    cache_key = build_cache_key("anime:seasons", anime_id=anime_id)
+    cached_data = get_cache(cache_key)
+    if cached_data is not None:
+        return cached_data
+
+    async with httpx.AsyncClient(timeout=ANILIST_TIMEOUT) as client:
+        start = await _fetch_season_media(client, anime_id)
+
+        # movies/OVAs aren't part of a season chain, treat them as their own single season
+        if start.get("format") in SEASON_FORMATS:
+            prequels = await _walk_seasons(client, start, "PREQUEL")
+            sequels = await _walk_seasons(client, start, "SEQUEL")
+        else:
+            prequels, sequels = [], []
+
+    ordered = [*reversed(prequels), start, *sequels]
+    seasons = [_season_summary(media, index + 1) for index, media in enumerate(ordered)]
+
+    data = {
+        "anime_id": anime_id,
+        "current_season": len(prequels) + 1,
+        "seasons": seasons,
+    }
+
+    set_cache(cache_key, data, ANIME_BY_ID_CACHE_TTL_SECONDS)
+    return data

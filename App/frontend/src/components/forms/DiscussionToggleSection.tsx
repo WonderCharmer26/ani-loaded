@@ -4,63 +4,71 @@ type DiscussionToggleSectionProps = {
   form: DiscussionFormApi;
 };
 
-const getToggleClasses = (isActive: boolean) =>
-  `relative inline-flex h-6 w-11 items-center rounded-full transition ${
-    isActive ? "bg-emerald-500" : "bg-slate-700"
-  }`;
+type ToggleProps = {
+  label: string;
+  description: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+};
 
-const getToggleKnobClasses = (isActive: boolean) =>
-  `inline-block h-4 w-4 transform rounded-full bg-white transition ${
-    isActive ? "translate-x-6" : "translate-x-1"
-  }`;
+// small inline switch used in the composer footer
+function Toggle({ label, description, checked, onChange }: ToggleProps) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      title={description}
+      onClick={() => onChange(!checked)}
+      className="group flex items-center gap-2 rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#4DA3F0]"
+    >
+      <span
+        className={`flex h-4.5 w-8 shrink-0 items-center rounded-full p-0.5 transition-colors duration-200 ${
+          checked ? "bg-[#4DA3F0]" : "bg-[#2A3342] group-hover:bg-[#344055]"
+        }`}
+      >
+        <span
+          className={`size-3.5 rounded-full transition-all duration-200 ${
+            checked ? "translate-x-3.5 bg-white" : "translate-x-0 bg-[#8793A8]"
+          }`}
+        />
+      </span>
+      <span
+        className={`font-geist text-[13px]/4.5 font-medium transition-colors ${
+          checked ? "text-[#D7DDE8]" : "text-[#97A3B8]"
+        }`}
+      >
+        {label}
+      </span>
+    </button>
+  );
+}
 
 export default function DiscussionToggleSection({
   form,
 }: DiscussionToggleSectionProps) {
   return (
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className="flex items-center gap-5">
       <form.Field
         name="is_spoiler"
         children={(field) => (
-          <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900 px-4 py-3">
-            <div>
-              <p className="text-sm font-semibold text-slate-200">Spoiler</p>
-              <p className="text-xs text-slate-400">
-                Mark this discussion as spoiler content.
-              </p>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={field.state.value}
-              onClick={() => field.handleChange(!field.state.value)}
-              className={getToggleClasses(field.state.value)}
-            >
-              <span className={getToggleKnobClasses(field.state.value)} />
-            </button>
-          </div>
+          <Toggle
+            label="Spoiler"
+            description="Mark this discussion as spoiler content."
+            checked={field.state.value}
+            onChange={(checked) => field.handleChange(checked)}
+          />
         )}
       />
       <form.Field
         name="is_locked"
         children={(field) => (
-          <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900 px-4 py-3">
-            <div>
-              <p className="text-sm font-semibold text-slate-200">Locked</p>
-              <p className="text-xs text-slate-400">
-                Prevent new replies from being added.
-              </p>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={field.state.value}
-              onClick={() => field.handleChange(!field.state.value)}
-              className={getToggleClasses(field.state.value)}
-            >
-              <span className={getToggleKnobClasses(field.state.value)} />
-            </button>
-          </div>
+          <Toggle
+            label="Lock replies"
+            description="Prevent new replies from being added."
+            checked={field.state.value}
+            onChange={(checked) => field.handleChange(checked)}
+          />
         )}
       />
     </div>
