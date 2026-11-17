@@ -5,6 +5,7 @@ import axios from "axios";
 import {
   AniListMedia,
   AnimeInfoPageResponse,
+  AnimeSeasonsResponse,
   ShowcaseResponse,
 } from "../../schemas/animeSchemas"; // types for AniList response
 // use Supabase client to connect to the database
@@ -96,6 +97,25 @@ export async function getAnimeInfo(anime_id: number): Promise<AniListMedia> {
     return animeInfo;
   } catch (error) {
     throw buildApiError(error, `Failed to fetch anime ${anime_id}`);
+  }
+}
+
+// Function to get every season (with episode counts) for the anime's franchise
+// used by the discussion form's season/episode dropdowns
+export async function getAnimeSeasons(
+  anime_id: number,
+): Promise<AnimeSeasonsResponse> {
+  if (!Number.isInteger(anime_id) || anime_id <= 0) {
+    throw new Error("Invalid anime id. The id must be a positive integer.");
+  }
+
+  try {
+    const res = await axios.get<AnimeSeasonsResponse>(
+      `${backendUrl}/anime/${anime_id}/seasons`,
+    );
+    return res.data;
+  } catch (error) {
+    throw buildApiError(error, `Failed to fetch seasons for anime ${anime_id}`);
   }
 }
 

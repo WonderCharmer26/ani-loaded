@@ -1,10 +1,15 @@
 import { DiscussionFormApi } from "@/types/discussionForm";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Plus } from "lucide-react";
+import type { DragEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getFieldErrorMessage } from "./getFieldErrorMessage";
 
 // Props for this component
 type DiscussionThumbnailSectionProps = {
   form: DiscussionFormApi;
+  // validation error from a file dropped onto the composer card
+  dropError: string | null;
+  onDropErrorChange: (error: string | null) => void;
 };
 
 // params for this thumbnail component to follow
@@ -21,6 +26,8 @@ type ThumbnailFieldApi = {
 
 type ThumbnailFieldProps = {
   field: ThumbnailFieldApi;
+  dropError: string | null;
+  onDropErrorChange: (error: string | null) => void;
 };
 
 // 5mb
@@ -28,12 +35,8 @@ const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 // accepted file types
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
-// format the bytes for the upload
-const formatBytes = (bytes: number) =>
-  `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-
 // function to validate the file type before it's sent
-const validateFile = (file: File) => {
+export const validateThumbnailFile = (file: File) => {
   // check if file type matches
   if (!ACCEPTED_TYPES.includes(file.type)) {
     return "Only .jpeg, .png, or .webp images are allowed.";
@@ -47,32 +50,74 @@ const validateFile = (file: File) => {
   return null;
 };
 
-function ThumbnailField({ field }: ThumbnailFieldProps) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
+// lets the whole composer card act as a drop target for the cover image
+export function useThumbnailDrop(form: DiscussionFormApi) {
   const [isDragging, setIsDragging] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [dropError, setDropError] = useState<string | null>(null);
+  // counts nested dragenter/dragleave pairs so hovering children doesn't flicker
+  const dragDepth = useRef(0);
+
+  const hasFiles = (event: DragEvent) =>
+    Array.from(event.dataTransfer.types).includes("Files");
+
+  const dropHandlers = {
+    onDragEnter: (event: DragEvent) => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+      dragDepth.current += 1;
+      setIsDragging(true);
+    },
+    onDragOver: (event: DragEvent) => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+    },
+    onDragLeave: (event: DragEvent) => {
+      if (!hasFiles(event)) return;
+      dragDepth.current = Math.max(0, dragDepth.current - 1);
+      if (dragDepth.current === 0) setIsDragging(false);
+    },
+    onDrop: (event: DragEvent) => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+      dragDepth.current = 0;
+      setIsDragging(false);
+
+      const file = event.dataTransfer.files?.[0];
+      if (!file) return;
+
+      const validationError = validateThumbnailFile(file);
+      setDropError(validationError);
+      if (!validationError) form.setFieldValue("thumbnail", file);
+    },
+  };
+
+  return { isDragging, dropError, setDropError, dropHandlers };
+}
+
+// format the bytes for the upload
+const formatBytes = (bytes: number) =>
+  `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+
+function ThumbnailField({
+  field,
+  dropError,
+  onDropErrorChange,
+}: ThumbnailFieldProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-  const handleFileSelection = useCallback(
-    (file: File | null) => {
-      if (!file) {
-        setErrorMessage(null);
-        field.handleChange(null);
-        return;
-      }
+  const handleFileSelection = (file: File | null) => {
+    if (!file) {
+      onDropErrorChange(null);
+      field.handleChange(null);
+      return;
+    }
 
-      const validationError = validateFile(file);
-      if (validationError) {
-        setErrorMessage(validationError);
-        return;
-      }
-
-      setErrorMessage(null);
-      // set the file if everything else passes
-      field.handleChange(file);
-    },
-    [field],
-  );
+    const validationError = validateThumbnailFile(file);
+    onDropErrorChange(validationError);
+    // set the file if everything else passes
+    if (!validationError) field.handleChange(file);
+  };
 
   useEffect(() => {
     // reset the preview feature if no photo is selected
@@ -91,91 +136,68 @@ function ThumbnailField({ field }: ThumbnailFieldProps) {
 
   const openFileDialog = () => fileInputRef.current?.click();
   const fieldError = getFieldErrorMessage(field.state.meta.errors?.[0]);
-  const combinedError = errorMessage ?? fieldError;
+  const combinedError = dropError ?? fieldError;
+
+  const actionClasses =
+    "rounded-md px-2.5 py-1 font-geist text-xs/4 font-medium text-[#E4E8F0] transition-colors hover:bg-white/10";
 
   return (
-    <div className="space-y-2">
-      <label className="text-sm font-semibold text-slate-200">Thumbnail</label>
-      <div
-        className={`flex flex-col gap-3 rounded-xl border-2 border-dashed px-4 py-4 transition ${
-          isDragging
-            ? "border-emerald-400 bg-emerald-500/10"
-            : "border-slate-700 bg-slate-900"
-        }`}
-        onClick={openFileDialog}
-        onDragOver={(event) => {
-          event.preventDefault();
-          setIsDragging(true);
-        }}
-        onDragLeave={() => setIsDragging(false)}
-        onDrop={(event) => {
-          event.preventDefault();
-          setIsDragging(false);
-          const file = event.dataTransfer.files?.[0] ?? null;
+    <div className="flex flex-col gap-2">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={ACCEPTED_TYPES.join(",")}
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0] ?? null;
           handleFileSelection(file);
+          event.target.value = "";
         }}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            openFileDialog();
-          }
-        }}
-      >
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept={ACCEPTED_TYPES.join(",")}
-          className="hidden"
-          onChange={(event) => {
-            const file = event.target.files?.[0] ?? null;
-            handleFileSelection(file);
-            event.target.value = "";
-          }}
-        />
+      />
 
-        {previewUrl ? (
-          <div className="flex flex-col gap-3">
-            <img
-              src={previewUrl}
-              alt="Selected thumbnail preview"
-              className="h-40 w-full rounded-lg object-cover"
-            />
-            <div className="flex items-center justify-between text-xs text-slate-300">
-              <div className="space-y-1">
-                <p className="font-semibold text-slate-200">
-                  {field.state.value?.name}
-                </p>
-                <p>{formatBytes(field.state.value?.size ?? 0)}</p>
-              </div>
-              <button
-                type="button"
-                className="rounded-lg border border-slate-700 px-3 py-1 text-xs text-slate-200 hover:border-slate-500"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setErrorMessage(null);
-                  field.handleChange(null);
-                }}
-              >
-                Remove
-              </button>
-            </div>
+      {previewUrl ? (
+        // filled state: cover banner with change/remove on top
+        <div className="relative h-40 overflow-hidden rounded-[10px] sm:h-50">
+          <img
+            src={previewUrl}
+            alt={`Cover preview: ${field.state.value?.name ?? ""}`}
+            title={`${field.state.value?.name} · ${formatBytes(field.state.value?.size ?? 0)}`}
+            className="size-full object-cover"
+          />
+          <div className="absolute top-2.5 right-2.5 flex gap-1 rounded-lg bg-[#0C0E12]/80 p-0.75 backdrop-blur-sm">
+            <button type="button" className={actionClasses} onClick={openFileDialog}>
+              Change
+            </button>
+            <button
+              type="button"
+              className={actionClasses}
+              onClick={() => handleFileSelection(null)}
+            >
+              Remove
+            </button>
           </div>
-        ) : (
-          <div className="text-sm text-slate-400">
-            <p className="font-semibold text-slate-200">
-              Drag & drop an image here
-            </p>
-            <p>or click to upload a thumbnail</p>
-            <p className="text-xs text-slate-500">
-              Accepted: .jpeg, .png, .webp (max 5 MB)
-            </p>
-          </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        // empty state: quiet "add cover" line above the title
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+          <button
+            type="button"
+            onClick={openFileDialog}
+            className="group -ml-1.5 flex items-center gap-1.5 rounded-md py-1 pr-2 pl-1.5 transition-colors hover:bg-white/5 focus-visible:outline-2 focus-visible:outline-[#4DA3F0]"
+          >
+            <Plus className="size-3.5 text-[#7E8899] group-hover:text-[#C3CBD8]" strokeWidth={2} />
+            <span className="font-geist text-[13px]/4.5 font-medium text-[#97A3B8] group-hover:text-[#E4E8F0]">
+              Add cover
+            </span>
+          </button>
+          <span className="hidden font-geist text-[13px]/4.5 text-[#4A5262] sm:inline">
+            or drop an image anywhere on this card
+          </span>
+        </div>
+      )}
+
       {combinedError ? (
-        <p className="text-sm text-red-400">{combinedError}</p>
+        <span className="block font-geist text-sm text-red-400">{combinedError}</span>
       ) : null}
     </div>
   );
@@ -183,10 +205,18 @@ function ThumbnailField({ field }: ThumbnailFieldProps) {
 
 export default function DiscussionThumbnailSection({
   form,
+  dropError,
+  onDropErrorChange,
 }: DiscussionThumbnailSectionProps) {
   return (
     <form.Field name="thumbnail">
-      {(field: ThumbnailFieldApi) => <ThumbnailField field={field} />}
+      {(field: ThumbnailFieldApi) => (
+        <ThumbnailField
+          field={field}
+          dropError={dropError}
+          onDropErrorChange={onDropErrorChange}
+        />
+      )}
     </form.Field>
   );
 }

@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+@theme {
+  --font-geist: "Geist", system-ui, sans-serif;
+  --font-geist-mono: "Geist Mono", ui-monospace, monospace;
+}
+
 /* TODO: Add styles for the different HTML elements */
 
 /* Font's Used*/

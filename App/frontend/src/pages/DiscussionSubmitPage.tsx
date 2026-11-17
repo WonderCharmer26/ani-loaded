@@ -1,9 +1,10 @@
 import DiscussionBodySection from "@/components/forms/DiscussionBodySection";
 import DiscussionAnimeSearchSection from "@/components/forms/DiscussionAnimeSearchSection";
 import DiscussionCategorySection from "@/components/forms/DiscussionCategorySection";
-import DiscussionEpisodeNumberSection from "@/components/forms/DiscussionEpisodeNumberSection";
-import DiscussionSeasonNumberSection from "@/components/forms/DiscussionSeasonNumberSection";
-import DiscussionThumbnailSection from "@/components/forms/DiscussionThumbnailSection";
+import DiscussionSeasonEpisodeSection from "@/components/forms/DiscussionSeasonEpisodeSection";
+import DiscussionThumbnailSection, {
+  useThumbnailDrop,
+} from "@/components/forms/DiscussionThumbnailSection";
 import DiscussionTitleSection from "@/components/forms/DiscussionTitleSection";
 import DiscussionToggleSection from "@/components/forms/DiscussionToggleSection";
 import {
@@ -14,17 +15,20 @@ import type { AniListMedia } from "@/schemas/animeSchemas";
 import { submitDiscussion } from "@/services/api/discussionService";
 import { useForm } from "@tanstack/react-form";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 // TODO: send user token with request when sending the form, have backend handle the validation and adding the username
-// TODO: MAKE THE USER NAVIGATE BACK TO THE DISCUSSION PAGE
 // TODO: LOOK INTO HOW THE TANSTACK FORM WORK WITH DATA MUTATION
 
+const DISCUSSIONS_LINK = "/discussions";
+
 export default function DiscussionSubmitPage() {
-  // houses current selectedAnime
+  // houses current selectedAnime (changes when a different season is picked)
   const [selectedAnime, setSelectedAnime] = useState<AniListMedia | null>(null);
+  // the anime picked from search, its franchise drives the season dropdown
+  const [searchedAnimeId, setSearchedAnimeId] = useState<number | null>(null);
 
   // for set up of naviagation to main page
   const navigate = useNavigate();
@@ -85,9 +89,8 @@ export default function DiscussionSubmitPage() {
           // notify the user
           toast("Your discussion has been posted");
 
-          // NOTE: might just clear the form and keep the user there
-          navigate("/discussions");
           // navigate back to the list of discussions
+          navigate(DISCUSSIONS_LINK);
         }
       } catch (error) {
         toast.error(`Discussion submition failed: ${error}`);
@@ -95,46 +98,118 @@ export default function DiscussionSubmitPage() {
     },
   });
 
+  // the whole composer card accepts a dropped cover image
+  const { isDragging, dropError, setDropError, dropHandlers } =
+    useThumbnailDrop(form);
+
+  // season/episode belong to the picked anime, so clear them when it changes
+  const handleAnimeSelect = (anime: AniListMedia | null) => {
+    setSelectedAnime(anime);
+    setSearchedAnimeId(anime?.id ?? null);
+    form.setFieldValue("season_number", undefined);
+    form.setFieldValue("episode_number", undefined);
+  };
+
+  // picking another season links the discussion to that season's own entry
+  const handleSeasonAnimeChange = (anime: AniListMedia) => {
+    setSelectedAnime(anime);
+    form.setFieldValue("anime_id", anime.id);
+  };
+
   return (
-    <div className="px-6 py-10">
-      <div className="mx-auto max-w-3xl space-y-6">
-        <h1 className="text-3xl font-bold text-white">New Discussion</h1>
+    <div className="px-4 pt-10 pb-24 sm:pt-14">
+      <div className="mx-auto flex max-w-180 flex-col gap-7 text-left">
+        <h1 className="font-geist! text-3xl/9! font-bold! tracking-[-0.025em] text-[#F3F5F9] sm:text-[40px]/11!">
+          Start a discussion
+        </h1>
+
         <form
           onSubmit={(event) => {
             event.preventDefault(); // prevent form refresh on submit
             event.stopPropagation(); // make sure that the individual child components are handled
             form.handleSubmit(); // submit function
           }}
-          className="space-y-6"
         >
-          {/* Different sections of the form */}
-          <DiscussionThumbnailSection form={form} />
-          <DiscussionAnimeSearchSection
-            form={form}
-            onAnimeSelect={setSelectedAnime}
-          />
-          <DiscussionEpisodeNumberSection form={form} />
-          <DiscussionSeasonNumberSection form={form} />
-          <DiscussionCategorySection form={form} />
-          <DiscussionTitleSection form={form} />
-          <DiscussionBodySection form={form} />
-          <DiscussionToggleSection form={form} />
-
-          {/* Submit button */}
-          {/* Handles the state of the button based on the form*/}
-          <form.Subscribe
-            selector={(state) => [state.canSubmit, state.isSubmitting]}
+          {/* Composer card */}
+          <div
+            {...dropHandlers}
+            className="relative flex flex-col overflow-hidden rounded-2xl bg-[#141922]"
           >
-            {([canSubmit, isSubmitting]) => (
-              <button
-                type="submit"
-                disabled={!canSubmit || isSubmitting}
-                className="rounded-xl bg-black px-4 py-2 font-semibold text-white"
-              >
-                {isSubmitting ? "Submitting..." : "Submit"}
-              </button>
-            )}
-          </form.Subscribe>
+            <DiscussionAnimeSearchSection
+              form={form}
+              selectedAnime={selectedAnime}
+              onAnimeSelect={handleAnimeSelect}
+            />
+
+            {/* Category + season/episode (only once an anime is picked) */}
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 pt-4 sm:px-5">
+              <DiscussionCategorySection form={form} />
+              {searchedAnimeId ? (
+                <DiscussionSeasonEpisodeSection
+                  key={searchedAnimeId}
+                  form={form}
+                  animeId={searchedAnimeId}
+                  onSeasonAnimeChange={handleSeasonAnimeChange}
+                />
+              ) : null}
+            </div>
+
+            {/* Writing area */}
+            <div className="flex flex-col gap-3 px-4 pt-6 pb-5 sm:px-5">
+              <DiscussionThumbnailSection
+                form={form}
+                dropError={dropError}
+                onDropErrorChange={setDropError}
+              />
+              <DiscussionTitleSection form={form} />
+              <DiscussionBodySection form={form} />
+            </div>
+
+            {/* Footer: toggles + actions */}
+            <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-3 bg-[#101114] px-4 py-3.5 sm:px-5">
+              <DiscussionToggleSection form={form} />
+
+              <div className="ml-auto flex items-center gap-4">
+                <form.Subscribe selector={(state) => state.values.body.length}>
+                  {(bodyLength) => (
+                    <span className="hidden font-geist-mono text-[11px]/4 text-[#5A6474] sm:inline">
+                      {bodyLength} chars
+                    </span>
+                  )}
+                </form.Subscribe>
+                <Link
+                  to={DISCUSSIONS_LINK}
+                  className="font-geist text-sm/5 font-medium text-[#97A3B8] transition-colors hover:text-[#E4E8F0]"
+                >
+                  Cancel
+                </Link>
+
+                {/* Handles the state of the button based on the form*/}
+                <form.Subscribe
+                  selector={(state) => [state.canSubmit, state.isSubmitting]}
+                >
+                  {([canSubmit, isSubmitting]) => (
+                    <button
+                      type="submit"
+                      disabled={!canSubmit || isSubmitting}
+                      className="rounded-full bg-[#4DA3F0] px-4.5 py-2 font-geist text-sm/5 font-semibold text-[#06101C] transition-colors hover:bg-[#6AB4F4] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isSubmitting ? "Posting…" : "Post discussion"}
+                    </button>
+                  )}
+                </form.Subscribe>
+              </div>
+            </div>
+
+            {/* Drop overlay while dragging a file over the card */}
+            {isDragging ? (
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-2xl bg-[#4DA3F0]/8 ring-2 ring-[#4DA3F0] ring-inset">
+                <span className="rounded-full bg-[#0C0E12]/90 px-3.5 py-1.5 font-geist text-[13px]/4.5 font-medium text-[#CFE6FB]">
+                  Drop to set as cover
+                </span>
+              </div>
+            ) : null}
+          </div>
         </form>
       </div>
     </div>

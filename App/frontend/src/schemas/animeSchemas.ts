@@ -79,6 +79,46 @@ export interface AnimeInfoPageResponse {
   };
 }
 
+// one season in an anime's franchise (AniList links seasons as prequels/sequels)
+export interface AnimeSeason {
+  season_number: number;
+  anime_id: number;
+  title: string | null;
+  title_english: string | null;
+  title_romaji: string | null;
+  cover_image: { large: string | null; medium: string | null };
+  genres: string[];
+  season: string | null; // WINTER, SPRING, SUMMER, FALL
+  season_year: number | null;
+  status: AniListMedia["status"];
+  episodes: number | null;
+  aired_episodes: number; // only episodes that have already aired
+}
+
+// turn a season into the same shape as a search result so the form can use it as the picked anime
+export function seasonToMedia(season: AnimeSeason): AniListMedia {
+  return {
+    id: season.anime_id,
+    title: { english: season.title_english, romaji: season.title_romaji },
+    coverImage: {
+      large: season.cover_image.large ?? undefined,
+      medium: season.cover_image.medium ?? undefined,
+    },
+    episodes: season.episodes,
+    season: season.season ?? undefined,
+    seasonYear: season.season_year,
+    genres: season.genres,
+    status: season.status,
+  };
+}
+
+// response from /anime/{anime_id}/seasons
+export interface AnimeSeasonsResponse {
+  anime_id: number;
+  current_season: number; // season number of the anime that was asked for
+  seasons: AnimeSeason[];
+}
+
 // all the studio interfaces needed to make an interface for the studio
 export interface Studio {
   id: number;

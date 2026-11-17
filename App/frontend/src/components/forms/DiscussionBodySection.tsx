@@ -16,25 +16,19 @@ export default function DiscussionBodySection({
         const errorMessage = getFieldErrorMessage(field.state.meta.errors?.[0]);
 
         return (
-          <div className="space-y-2">
-            <label
-              htmlFor={field.name}
-              className="text-sm font-semibold text-slate-200"
-            >
-              Body
-            </label>
+          <div className="flex flex-col gap-1">
             <textarea
               id={field.name}
               name={field.name}
+              aria-label="Body"
               value={field.state.value ?? ""}
               onBlur={field.handleBlur}
               onChange={(event) => field.handleChange(event.target.value)}
               placeholder="What's on your mind?"
-              rows={6}
-              className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 focus:border-slate-500 focus:outline-none"
+              className="field-sizing-content min-h-45 w-full resize-none bg-transparent font-geist text-base/6.5 text-[#C3CBD8] placeholder:text-[#5F6A7B] focus:outline-none"
             />
             {errorMessage ? (
-              <p className="text-sm text-red-400">{errorMessage}</p>
+              <span className="block font-geist text-sm text-red-400">{errorMessage}</span>
             ) : null}
           </div>
         );

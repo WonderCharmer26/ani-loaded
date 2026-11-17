@@ -248,3 +248,84 @@ async def test_get_anime_by_id_request_error_returns_503(async_client, monkeypat
 
     response = await async_client.get("/anime/1")
     assert response.status_code == 503
+
+
+# ---------------------------------------------------------------------------
+# GET /anime/{anime_id}/seasons
+# ---------------------------------------------------------------------------
+
+def _season_node(node_id: int, edges: list | None = None, **fields):
+    node = {
+        "id": node_id,
+        "title": {"english": f"Show S{node_id}"},
+        "type": "ANIME",
+        "format": "TV",
+        "status": "FINISHED",
+        "episodes": 12,
+        **fields,
+    }
+    if edges is not None:
+        node["relations"] = {"edges": edges}
+    return node
+
+
+def _season_edge(relation_type: str, node: dict):
+    return {"relationType": relation_type, "node": node}
+
+
+async def test_get_anime_seasons_orders_prequels_and_sequels(async_client, monkeypatch):
+    # season 2 was picked: season 1 is its prequel, season 3 its sequel
+    media = _season_node(
+        2,
+        edges=[
+            _season_edge("PREQUEL", _season_node(1, edges=[])),
+            _season_edge(
+                "SEQUEL",
+                _season_node(3, edges=[], status="RELEASING", nextAiringEpisode={"episode": 6}),
+            ),
+        ],
+    )
+    mock_cls, mock_client = make_httpx_mock({"data": {"Media": media}})
+    monkeypatch.setattr("routers.anime.httpx.AsyncClient", mock_cls)
+
+    data = (await async_client.get("/anime/2/seasons")).json()
+
+    assert data["current_season"] == 2
+    assert [s["anime_id"] for s in data["seasons"]] == [1, 2, 3]
+    assert [s["season_number"] for s in data["seasons"]] == [1, 2, 3]
+    assert data["seasons"][2]["aired_episodes"] == 5
+    assert mock_client.post.call_count == 1
+
+
+async def test_get_anime_seasons_movie_is_single_season(async_client, monkeypatch):
+    media = _season_node(
+        9,
+        edges=[_season_edge("PREQUEL", _season_node(1, edges=[]))],
+        format="MOVIE",
+        episodes=1,
+    )
+    mock_cls, _ = make_httpx_mock({"data": {"Media": media}})
+    monkeypatch.setattr("routers.anime.httpx.AsyncClient", mock_cls)
+
+    data = (await async_client.get("/anime/9/seasons")).json()
+
+    assert data["current_season"] == 1
+    assert [s["anime_id"] for s in data["seasons"]] == [9]
+
+
+async def test_get_anime_seasons_uses_cache_on_second_call(async_client, monkeypatch):
+    mock_cls, mock_client = make_httpx_mock({"data": {"Media": _season_node(1, edges=[])}})
+    monkeypatch.setattr("routers.anime.httpx.AsyncClient", mock_cls)
+
+    await async_client.get("/anime/1/seasons")
+    await async_client.get("/anime/1/seasons")
+
+    assert mock_client.post.call_count == 1
+
+
+async def test_get_anime_seasons_not_found_returns_404(async_client, monkeypatch):
+    mock_cls, _ = make_httpx_mock({"data": {"Media": None}})
+    monkeypatch.setattr("routers.anime.httpx.AsyncClient", mock_cls)
+
+    response = await async_client.get("/anime/1/seasons")
+    assert response.status_code == 404
