@@ -1,3 +1,5 @@
+import logging
+
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -35,6 +37,7 @@ from routers.discussions import validate_anime_exists
 
 # connect to the router
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 async def get_authorized_supabase(
@@ -166,11 +169,14 @@ async def get_all_lists():
 
         return validated_list
 
-    except Exception as e:
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Failed to fetch public lists")
         raise HTTPException(
-            status_code=404,
-            detail=f"There was an error: {e}",
-        )
+            status_code=500,
+            detail="Failed to fetch public lists",
+        ) from exc
 
 
 # this route doesn't need to be protected
@@ -218,8 +224,9 @@ async def get_specific_list(list_id: str, authorization: Optional[str] = Header(
 
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"There was an error: {e}")
+    except Exception as exc:
+        logger.exception("Failed to fetch list", extra={"list_id": list_id})
+        raise HTTPException(status_code=500, detail="Failed to fetch list") from exc
 
 
 @router.patch("/list/{list_id}", response_model=UserListSuccessMessage)
@@ -249,8 +256,9 @@ async def change_specific_list(
 
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to update your list: {e}")
+    except Exception as exc:
+        logger.exception("Failed to update list", extra={"list_id": list_id})
+        raise HTTPException(status_code=500, detail="Failed to update your list") from exc
 
 
 # route for deleting lists
@@ -282,8 +290,9 @@ async def delete_specific_list(
     except HTTPException:
         raise
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to delete your list: {e}")
+    except Exception as exc:
+        logger.exception("Failed to delete list", extra={"list_id": list_id})
+        raise HTTPException(status_code=500, detail="Failed to delete your list") from exc
 
 
 # protected route (get specific users lists shown on profile page)
@@ -319,8 +328,9 @@ async def get_user_watch_list(
         return {"watchlist": validated}
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch watchlist: {e}")
+    except Exception as exc:
+        logger.exception("Failed to fetch watchlist")
+        raise HTTPException(status_code=500, detail="Failed to fetch watchlist") from exc
 
 
 @router.get("/watchlist/{watched_id}")
@@ -349,10 +359,11 @@ async def check_if_watched(
         }
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception as exc:
+        logger.exception("Failed to check watchlist item", extra={"anime_id": watched_id})
         raise HTTPException(
-            status_code=500, detail=f"Failed to check watchlist item: {e}"
-        )
+            status_code=500, detail="Failed to check watchlist item"
+        ) from exc
 
 
 @router.post("/watchlist/{watched_id}")
@@ -394,10 +405,11 @@ async def add_to_watchlist(
         return {"message": "Anime added to watchlist"}
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception as exc:
+        logger.exception("Failed to add watchlist item", extra={"anime_id": watched_id})
         raise HTTPException(
-            status_code=500, detail=f"Failed to add watchlist item: {e}"
-        )
+            status_code=500, detail="Failed to add watchlist item"
+        ) from exc
 
 
 @router.patch("/watchlist/{watched_id}")
@@ -424,10 +436,11 @@ async def update_watchlist_status(
         return {"message": "Watchlist status updated"}
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception as exc:
+        logger.exception("Failed to update watchlist item", extra={"anime_id": watched_id})
         raise HTTPException(
-            status_code=500, detail=f"Failed to update watchlist item: {e}"
-        )
+            status_code=500, detail="Failed to update watchlist item"
+        ) from exc
 
 
 @router.delete("/watchlist/{watched_id}")
@@ -453,10 +466,11 @@ async def remove_from_watchlist(
         return {"message": "Anime removed from watchlist"}
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception as exc:
+        logger.exception("Failed to remove watchlist item", extra={"anime_id": watched_id})
         raise HTTPException(
-            status_code=500, detail=f"Failed to remove watchlist item: {e}"
-        )
+            status_code=500, detail="Failed to remove watchlist item"
+        ) from exc
 
 
 @router.get("/watchlist/status/{anime_id}")
@@ -487,10 +501,11 @@ async def get_watchlist_status(
         }
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception as exc:
+        logger.exception("Failed to fetch watchlist status", extra={"anime_id": anime_id})
         raise HTTPException(
-            status_code=500, detail=f"Failed to fetch watchlist status: {e}"
-        )
+            status_code=500, detail="Failed to fetch watchlist status"
+        ) from exc
 
 
 @router.get("/users/{user_id}/watchlist")
@@ -520,10 +535,11 @@ async def get_user_watchlist_by_user_id(
         return {"watchlist": validated}
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception as exc:
+        logger.exception("Failed to fetch user watchlist", extra={"user_id": user_id})
         raise HTTPException(
-            status_code=500, detail=f"Failed to fetch user watchlist by user id: {e}"
-        )
+            status_code=500, detail="Failed to fetch user watchlist"
+        ) from exc
 
 
 # rank based on most upvoted list in ascending order, add pagination
@@ -569,8 +585,9 @@ async def create_list(
                 .upsert(anime_payload, on_conflict="id")
                 .execute()
             )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Anime upsert failed: {e}")
+    except Exception as exc:
+        logger.exception("Anime upsert failed while creating list")
+        raise HTTPException(status_code=500, detail="Anime upsert failed") from exc
 
     # payload to sent to list table
     list_payload = {
@@ -591,8 +608,9 @@ async def create_list(
         created_list = list_response.data[0]
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"List insert failed: {e}")
+    except Exception as exc:
+        logger.exception("List insert failed")
+        raise HTTPException(status_code=500, detail="List insert failed") from exc
 
     # array of the entries to to place in the database
     entry_payload = [
@@ -612,7 +630,8 @@ async def create_list(
             if entry_payload
             else None
         )
-    except Exception as e:
+    except Exception as exc:
+        logger.exception("List entry insert failed")
         try:
             # error handle
             await (
@@ -622,8 +641,8 @@ async def create_list(
                 .execute()
             )
         except Exception:
-            pass
-        raise HTTPException(status_code=500, detail=f"List entry insert failed: {e}")
+            logger.warning("Failed to roll back list after entry insert failure", exc_info=True)
+        raise HTTPException(status_code=500, detail="List entry insert failed") from exc
 
     # NOTE: GOING TO LET SUPABASE HANDLE GETTING USER NAME
     list_with_entries = {
@@ -646,7 +665,7 @@ async def create_list(
                 profile_response.data.get("username") or "Unknown"
             )
     except Exception:
-        pass
+        logger.warning("Failed to fetch list owner username", exc_info=True)
 
     list_with_entries.pop("owner_id", None)
 

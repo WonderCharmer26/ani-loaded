@@ -140,11 +140,22 @@ async def test_validate_anime_request_error_raises_503(monkeypatch):
 # attach_discussion_authors
 # ---------------------------------------------------------------------------
 
-from routers.discussions import attach_discussion_authors  # noqa: E402
+from routers.discussions import (  # noqa: E402
+    attach_comment_authors,
+    attach_discussion_authors,
+    public_discussion,
+)
 from tests.helpers.mock_factories import (  # noqa: E402
     make_discussion_row,
     make_supabase_builder,
 )
+
+
+def test_public_discussion_omits_owner_id_and_reports_viewer_ownership():
+    result = public_discussion(make_discussion_row(created_by="user-1"), "user-1")
+
+    assert "created_by" not in result
+    assert result["is_author"] is True
 
 
 async def test_attach_authors_adds_username_and_avatar():
@@ -159,7 +170,9 @@ async def test_attach_authors_adds_username_and_avatar():
 
     assert result["author_username"] == "MechaMuse"
     assert result["author_avatar_url"] == "https://a/b.png"
-    builder.in_.assert_called_once_with("user_id", ["user-1"])
+    builder.rpc.assert_called_once_with(
+        "get_public_profiles", {"profile_ids": ["user-1"]}
+    )
 
 
 async def test_attach_authors_missing_profile_returns_none_fields():
@@ -188,3 +201,21 @@ async def test_attach_authors_empty_list_skips_query():
 
     assert await attach_discussion_authors(builder, []) == []
     builder.execute.assert_not_called()
+
+
+async def test_attach_comment_authors_uses_current_profile_fields():
+    builder = make_supabase_builder(
+        execute_data=[
+            {
+                "user_id": "user-1",
+                "username": "RenamedUser",
+                "avatar_url": "https://a/current.png",
+            }
+        ]
+    )
+    comments = [{"id": "comment-1", "created_by": "user-1"}]
+
+    [result] = await attach_comment_authors(builder, comments)
+
+    assert result["created_by_username"] == "RenamedUser"
+    assert result["created_by_avatar_url"] == "https://a/current.png"

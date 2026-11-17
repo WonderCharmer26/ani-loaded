@@ -9,7 +9,6 @@ class Discussions(BaseModel):
     id: UUID
     anime_id: int
     category_id: UUID
-    created_by: UUID  # might make into a string depending on how supabase sets it up
     title: str
     body: str
     thumbnail_url: Optional[str]
@@ -26,6 +25,7 @@ class Discussions(BaseModel):
     # author info joined from the profiles table
     author_username: Optional[str] = None
     author_avatar_url: Optional[str] = None
+    is_author: Optional[bool] = None
 
 
 # function for the discussion posting
@@ -47,7 +47,6 @@ class DiscussionsRequest(BaseModel):
 class DiscussionComments(BaseModel):
     id: UUID
     discussion_id: UUID
-    created_by: str
     created_by_username: Optional[str]
     parent_comment_id: UUID
     body: str

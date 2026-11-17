@@ -80,7 +80,7 @@ export default function DiscussionInfoPage() {
 
   // Fetch discussion data
   const { data: discussion, isLoading: discussionLoading } = useQuery({
-    queryKey: ["discussion", id],
+    queryKey: ["discussion", id, user?.id],
     queryFn: () => getDiscussionById(id!),
     enabled: !!id,
   });
@@ -92,8 +92,8 @@ export default function DiscussionInfoPage() {
     enabled: !!id,
   });
 
-  // check if current user is the author
-  const isAuthor = user && discussion?.created_by === user.id;
+  // The backend determines ownership so author IDs never reach the client.
+  const isAuthor = discussion?.is_author === true;
 
   // Edit mutation
   const editMutation = useMutation({

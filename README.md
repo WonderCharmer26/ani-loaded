@@ -1,6 +1,10 @@
 # AniLoaded
 
-AniLoaded is a React/Vite frontend backed by FastAPI, Supabase, AniList, and an OpenAI/LangChain recommendation pipeline.
+## Understanding the tech stack
+
+AniLoaded is a React and Vite frontend backed by FastAPI, Supabase, AniList, and an OpenAI/LangChain recommendation pipeline.
+
+### Development Info
 
 - Local development: see [`App/README.md`](App/README.md)
 - Architecture and end-to-end flows: see [`docs/architecture.md`](docs/architecture.md)

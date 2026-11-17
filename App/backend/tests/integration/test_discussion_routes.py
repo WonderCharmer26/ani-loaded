@@ -40,6 +40,7 @@ async def test_get_discussions_returns_data_and_total(async_client, monkeypatch)
     data = (await async_client.get("/discussions")).json()
     assert "data" in data
     assert data["total"] == 2
+    assert all("created_by" not in discussion for discussion in data["data"])
 
 
 async def test_get_discussions_empty_table_returns_empty_list(async_client, monkeypatch):

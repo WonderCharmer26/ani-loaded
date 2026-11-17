@@ -40,6 +40,10 @@ vi.mock("sonner", () => ({
 describe("discussionService", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(supabase.auth.getSession).mockResolvedValue({
+      data: { session: null },
+      error: null,
+    } as never);
   });
 
   it("returns discussion list from getAllDiscussions", async () => {
@@ -59,7 +63,21 @@ describe("discussionService", () => {
     const result = await getDiscussionById("abc");
 
     expect(result).toEqual(data);
-    expect(axios.get).toHaveBeenCalledWith("https://api.test/discussions/abc");
+    expect(axios.get).toHaveBeenCalledWith("https://api.test/discussions/abc", {});
+  });
+
+  it("sends the session token when fetching a discussion", async () => {
+    vi.mocked(supabase.auth.getSession).mockResolvedValueOnce({
+      data: { session: { access_token: "token" } },
+      error: null,
+    } as never);
+    vi.mocked(axios.get).mockResolvedValueOnce({ data: { id: "abc" } } as never);
+
+    await getDiscussionById("abc");
+
+    expect(axios.get).toHaveBeenCalledWith("https://api.test/discussions/abc", {
+      headers: { Authorization: "Bearer token" },
+    });
   });
 
   it("returns comment array from getDiscussionComments", async () => {

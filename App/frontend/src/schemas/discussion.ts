@@ -4,7 +4,7 @@ export interface Discussion {
   id: string;
   anime_id: number;
   category_id: string;
-  created_by?: string; // NOTE: might remove
+  is_author?: boolean;
   title: string;
   body: string;
   is_locked: boolean;
@@ -49,7 +49,6 @@ export interface DiscussionRequest {
 export interface DiscussionsComments {
   id: string;
   discussion_id: string;
-  created_by: string;
   created_by_username?: string;
   created_by_avatar_url?: string;
   parent_comment_id: string;

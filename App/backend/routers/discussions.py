@@ -1,3 +1,4 @@
+import logging
 import os
 import uuid
 from collections.abc import AsyncIterator
@@ -22,8 +23,10 @@ from utilities.genreFunctions import ANILIST_URL
 
 # Api router
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
+# function to get tap in and get supabase connection for client
 async def get_authorized_supabase(
     authorization: str = Header(...),
 ) -> AsyncIterator[AsyncClient]:
@@ -108,7 +111,17 @@ async def validate_anime_exists(anime_id: int) -> bool:
 
 
 # attach the author's username + avatar (from the profiles table) to each discussion
-async def attach_discussion_authors(supabase, discussion_rows: list[dict]) -> list[dict]:
+def public_discussion(discussion: dict, viewer_id: str | None = None) -> dict:
+    """Return discussion fields that are safe for the client."""
+    public = {key: value for key, value in discussion.items() if key != "created_by"}
+    if viewer_id is not None:
+        public["is_author"] = str(discussion.get("created_by")) == viewer_id
+    return public
+
+
+async def attach_discussion_authors(
+    supabase, discussion_rows: list[dict]
+) -> list[dict]:
     author_ids = {
         str(row["created_by"]) for row in discussion_rows if row.get("created_by")
     }
@@ -116,18 +129,16 @@ async def attach_discussion_authors(supabase, discussion_rows: list[dict]) -> li
     profile_by_user_id: dict[str, dict] = {}
     if author_ids:
         try:
-            profile_response = await (
-                supabase.table("profiles")
-                .select("user_id, username, avatar_url")
-                .in_("user_id", list(author_ids))
-                .execute()
-            )
+            profile_response = await supabase.rpc(
+                "get_public_profiles", {"profile_ids": list(author_ids)}
+            ).execute()
             for profile_row in profile_response.data or []:
                 user_id = profile_row.get("user_id")
                 if user_id is not None:
                     profile_by_user_id[str(user_id)] = profile_row
         except Exception:
-            # author info is cosmetic, never fail the discussion request over it
+            # Author info is cosmetic, never fail the discussion request over it.
+            logger.warning("Failed to load discussion author profiles", exc_info=True)
             profile_by_user_id = {}
 
     enriched: list[dict] = []
@@ -141,6 +152,40 @@ async def attach_discussion_authors(supabase, discussion_rows: list[dict]) -> li
             }
         )
     return enriched
+
+
+async def attach_comment_authors(supabase, comment_rows: list[dict]) -> list[dict]:
+    """Attach current public profile details to comments."""
+    author_ids = {
+        str(row["created_by"]) for row in comment_rows if row.get("created_by")
+    }
+
+    profile_by_user_id: dict[str, dict] = {}
+    if author_ids:
+        try:
+            profile_response = await supabase.rpc(
+                "get_public_profiles", {"profile_ids": list(author_ids)}
+            ).execute()
+            profile_by_user_id = {
+                str(profile["user_id"]): profile
+                for profile in profile_response.data or []
+                if profile.get("user_id") is not None
+            }
+        except Exception:
+            logger.warning("Failed to load comment author profiles", exc_info=True)
+
+    return [
+        {
+            **row,
+            "created_by_username": profile_by_user_id.get(
+                str(row.get("created_by")), {}
+            ).get("username"),
+            "created_by_avatar_url": profile_by_user_id.get(
+                str(row.get("created_by")), {}
+            ).get("avatar_url"),
+        }
+        for row in comment_rows
+    ]
 
 
 # gets all the discussions from the database with optional search, filter, and sort
@@ -191,14 +236,15 @@ async def get_discussions(
 
         # return data
         return {
-            "data": discussions,
+            "data": [public_discussion(discussion) for discussion in discussions],
             "total": len(discussions),
         }
-    except Exception as e:
+    except Exception as exc:
+        logger.exception("Failed to fetch discussions")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to fetch discussions: {e}",
-        )
+            detail="Failed to fetch discussions",
+        ) from exc
 
 
 # Route to get discussion categories (must be before {discussion_id} route)
@@ -215,17 +261,25 @@ async def get_discussion_categories():
             .execute()
         )
         return {"data": response.data}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch categories: {e}")
+    except Exception as exc:
+        logger.exception("Failed to fetch discussion categories")
+        raise HTTPException(status_code=500, detail="Failed to fetch categories") from exc
 
 
 # Route to get a specific discussion by ID
 @router.get("/discussions/{discussion_id}")
-async def get_discussion_by_id(discussion_id: str):
+async def get_discussion_by_id(
+    discussion_id: str,
+    authorization: str | None = Header(None),
+):
     """
     This function returns a specific discussion by its ID
     """
     try:
+        viewer_id = None
+        if authorization:
+            viewer_id = str((await auth_validator(authorization)).id)
+
         supabase = await get_supabase_client()
         # Get the discussion by id from the database
         response = await (
@@ -243,17 +297,20 @@ async def get_discussion_by_id(discussion_id: str):
             )
 
         [discussion] = await attach_discussion_authors(supabase, [response.data])
-        return discussion
+        return public_discussion(discussion, viewer_id)
 
-    except Exception as e:
-        # Handle supabase errors
-        if hasattr(e, "code") and e.code == "PGRST116":
+    except HTTPException:
+        raise
+    except Exception as exc:
+        # Handle Supabase's "no rows" error.
+        if getattr(exc, "code", None) == "PGRST116":
             raise HTTPException(
                 status_code=404, detail=f"Discussion with id {discussion_id} not found"
             )
+        logger.exception("Failed to fetch discussion", extra={"discussion_id": discussion_id})
         raise HTTPException(
-            status_code=500, detail=f"Error fetching discussion: {str(e)}"
-        )
+            status_code=500, detail="Error fetching discussion"
+        ) from exc
 
 
 # Route to get comments for a specific discussion
@@ -273,12 +330,18 @@ async def get_discussion_comments(discussion_id: str):
             .execute()
         )
 
-        return {"data": response.data, "total": len(response.data)}
+        comments_with_authors = await attach_comment_authors(supabase, response.data or [])
+        comments = [
+            {key: value for key, value in comment.items() if key != "created_by"}
+            for comment in comments_with_authors
+        ]
+        return {"data": comments, "total": len(comments)}
 
-    except Exception as e:
+    except Exception as exc:
+        logger.exception("Failed to fetch discussion comments", extra={"discussion_id": discussion_id})
         raise HTTPException(
-            status_code=500, detail=f"Error fetching comments: {str(e)}"
-        )
+            status_code=500, detail="Error fetching comments"
+        ) from exc
 
 
 # Protected route for making new discussions
@@ -334,8 +397,9 @@ async def post_new_discussion(
     try:
         # insert in to anime table so we can store the anime if it's new
         await supabase.table("anime").upsert(anime_payload, on_conflict="id").execute()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Anime upsert failed: {e}")
+    except Exception as exc:
+        logger.exception("Anime upsert failed", extra={"anime_id": anime_id})
+        raise HTTPException(status_code=500, detail="Anime upsert failed") from exc
 
     # variables to hold the thumbnail info
     thumbnail_path = None
@@ -385,8 +449,9 @@ async def post_new_discussion(
                 file=file_bytes,
                 file_options={"content-type": thumbnail.content_type, "upsert": False},
             )
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Upload of file failed: {e}")
+        except Exception as exc:
+            logger.exception("Discussion thumbnail upload failed")
+            raise HTTPException(status_code=500, detail="Thumbnail upload failed") from exc
 
         try:
             # try to get the public url to send to database to help link database to bucket
@@ -395,7 +460,7 @@ async def post_new_discussion(
                 bucket.get_public_url, thumbnail_path
             )
         except Exception:
-            # if not store none seeing as there must be no thumbnail posted
+            logger.warning("Failed to get discussion thumbnail public URL", exc_info=True)
             thumbnail_public_url = None
 
     # Payload that i'll send to the discussions table
@@ -417,7 +482,8 @@ async def post_new_discussion(
     try:
         # add the data from the request to the database
         res = await supabase.table("discussions").insert(payload).execute()
-    except Exception as e:
+    except Exception as exc:
+        logger.exception("Discussion insert failed")
         # if there is a path for the thumbnail
         if thumbnail_path:
             try:
@@ -425,15 +491,14 @@ async def post_new_discussion(
                 bucket = supabase.storage.from_(storage_key_discussion)
                 await _call_maybe_async(bucket.remove, [thumbnail_path])
             except Exception:
-                # doesn't matter
-                pass
-        # return a regular failed message
-        raise HTTPException(status_code=500, detail=f"DB insert failed: {e}")
+                logger.warning(
+                    "Failed to remove uploaded discussion thumbnail after insert failure",
+                    exc_info=True,
+                )
+        raise HTTPException(status_code=500, detail="Discussion creation failed") from exc
 
-    # store the data to return to validate success
-    success = (res.data or None)[0]
-
-    # return the data
+    # Return the new discussion without its internal owner ID.
+    success = public_discussion((res.data or None)[0])
     return {"discussion": success}
 
 
@@ -458,10 +523,11 @@ async def get_upvote_status(
             .execute()
         )
         return {"upvoted": len(response.data) > 0}
-    except Exception as e:
+    except Exception as exc:
+        logger.exception("Failed to fetch discussion upvote status")
         raise HTTPException(
-            status_code=500, detail=f"Failed to fetch upvote status: {e}"
-        )
+            status_code=500, detail="Failed to fetch upvote status"
+        ) from exc
 
 
 # Route to toggle an upvote on a discussion
@@ -483,8 +549,9 @@ async def toggle_upvote(
             {"p_discussion_id": discussion_id, "p_user_id": str(user.id)},
         ).execute()
         return result.data
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to toggle upvote: {e}")
+    except Exception as exc:
+        logger.exception("Failed to toggle discussion upvote")
+        raise HTTPException(status_code=500, detail="Failed to toggle upvote") from exc
 
 
 # Route to submit a comment on a discussion
@@ -502,17 +569,9 @@ async def post_comment(
     if not body:
         raise HTTPException(status_code=422, detail="Comment body cannot be empty")
 
-    # get username and avatar from user metadata
-    # NOTE: might change to profile table, so we dont have to use metadata
-    metadata = user.user_metadata or {}
-    username = metadata.get("username", "Anonymous")
-    avatar_url = metadata.get("avatar_url")
-
     payload = {
         "discussion_id": discussion_id,
         "created_by": str(user.id),
-        "created_by_username": username,
-        "created_by_avatar_url": avatar_url,
         "body": body,
         "is_spoiler": comment.is_spoiler,
     }
@@ -523,9 +582,9 @@ async def post_comment(
 
     try:
         res = await supabase.table("discussions_comments").insert(payload).execute()
-    except Exception as e:
-        print(f"[COMMENT INSERT ERROR] {e}")  # TODO: remove after debugging
-        raise HTTPException(status_code=500, detail=f"Failed to insert comment: {e}")
+    except Exception as exc:
+        logger.exception("Failed to insert discussion comment")
+        raise HTTPException(status_code=500, detail="Failed to insert comment") from exc
 
     try:
         # increment comment count on the discussion
@@ -544,10 +603,15 @@ async def post_comment(
             .execute()
         )
     except Exception:
-        # comment was already saved, don't fail the whole request
-        pass
+        # Comment was already saved, don't fail the whole request.
+        logger.warning("Failed to update discussion comment count", exc_info=True)
 
-    return {"comment": res.data[0]}
+    [comment] = await attach_comment_authors(supabase, res.data or [])
+    return {
+        "comment": {
+            key: value for key, value in comment.items() if key != "created_by"
+        }
+    }
 
 
 # Route to get comment upvote status for the current user
@@ -569,10 +633,11 @@ async def get_comment_upvote_status(
             .execute()
         )
         return {"upvoted": len(response.data) > 0}
-    except Exception as e:
+    except Exception as exc:
+        logger.exception("Failed to fetch comment upvote status")
         raise HTTPException(
-            status_code=500, detail=f"Failed to fetch comment upvote status: {e}"
-        )
+            status_code=500, detail="Failed to fetch comment upvote status"
+        ) from exc
 
 
 # Route to toggle an upvote on a comment
@@ -591,10 +656,11 @@ async def toggle_comment_upvote(
             {"p_comment_id": comment_id, "p_user_id": str(user.id)},
         ).execute()
         return result.data
-    except Exception as e:
+    except Exception as exc:
+        logger.exception("Failed to toggle comment upvote")
         raise HTTPException(
-            status_code=500, detail=f"Failed to toggle comment upvote: {e}"
-        )
+            status_code=500, detail="Failed to toggle comment upvote"
+        ) from exc
 
 
 # Route to update a discussion (only by the author)
@@ -647,11 +713,12 @@ async def update_discussion(
             .execute()
         )
 
-        return {"discussion": res.data[0]}
+        return {"discussion": public_discussion(res.data[0])}
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to update discussion: {e}")
+    except Exception as exc:
+        logger.exception("Failed to update discussion", extra={"discussion_id": discussion_id})
+        raise HTTPException(status_code=500, detail="Failed to update discussion") from exc
 
 
 # Route to delete a discussion (only by the author)
@@ -707,10 +774,15 @@ async def delete_discussion(
             try:
                 supabase.storage.from_(storage_key_discussion).remove([thumbnail_path])
             except Exception:
-                pass
+                logger.warning(
+                    "Failed to remove discussion thumbnail after deletion",
+                    extra={"discussion_id": discussion_id},
+                    exc_info=True,
+                )
 
         return {"deleted": True}
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to delete discussion: {e}")
+    except Exception as exc:
+        logger.exception("Failed to delete discussion", extra={"discussion_id": discussion_id})
+        raise HTTPException(status_code=500, detail="Failed to delete discussion") from exc

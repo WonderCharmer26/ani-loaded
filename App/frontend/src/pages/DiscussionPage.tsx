@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
@@ -61,6 +61,11 @@ export default function DiscussionPage() {
     queryKey: ["discussionCategories"],
     queryFn: getDiscussionCategories,
   });
+
+  const categoriesById = useMemo(
+    () => new Map(categories.map((c) => [c.id, c])),
+    [categories],
+  );
 
   const clearSearch = () => {
     const next = new URLSearchParams(searchParams);
@@ -165,7 +170,11 @@ export default function DiscussionPage() {
             </FeedMessage>
           ) : (
             threads.map((thread) => (
-              <DiscussionCard key={thread.id} thread={thread} />
+              <DiscussionCard
+                key={thread.id}
+                thread={thread}
+                category={categoriesById.get(thread.category_id)}
+              />
             ))
           )}
         </div>

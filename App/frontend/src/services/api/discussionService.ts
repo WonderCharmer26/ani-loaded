@@ -37,7 +37,11 @@ export async function getAllDiscussions(
 
 // function to get the specific discussions
 export async function getDiscussionById(id: string): Promise<Discussion> {
-  const res = await axios.get<Discussion>(`${backendUrl}/discussions/${id}`);
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+  const res = await axios.get<Discussion>(`${backendUrl}/discussions/${id}`, {
+    ...(token && { headers: { Authorization: `Bearer ${token}` } }),
+  });
   return res.data;
 }
 
